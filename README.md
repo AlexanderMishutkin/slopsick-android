@@ -192,7 +192,7 @@ allowed to see sends an event. Turning it off is the accessibility toggle, nothi
 
 ## Tests
 
-78 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+85 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
 interface rather than `AccessibilityNodeInfo`, so they can be run against 46 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
