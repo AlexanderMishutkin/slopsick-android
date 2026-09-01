@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FocusTube</string>
+    <string name="service_label">FocusTube feed filter</string>
+    <string name="service_summary">Covers feed posts from accounts you don\'t follow</string>
+    <string name="service_description">Reads the feed on screen in Instagram, LinkedIn and Chrome so it can cover posts you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
+
+    <string name="status_on">Filtering is on</string>
+    <string name="status_off">Filtering is off</string>
+    <string name="status_off_hint">FocusTube needs accessibility access to read what is on screen. Turn it on under Installed apps.</string>
+    <string name="open_settings">Open accessibility settings</string>
+
+    <string name="section_what">What to cover</string>
+    <string name="opt_suggested">Posts from accounts you don\'t follow</string>
+    <string name="opt_promoted">Ads and promoted posts</string>
+    <string name="opt_activity">LinkedIn: posts your network only reacted to</string>
+    <string name="opt_activity_sub">Off, you still see what your connections liked or commented on.</string>
+    <string name="opt_stories">Instagram: the stories row</string>
+    <string name="opt_modules">LinkedIn: \"People you may know\" and similar cards</string>
+
+    <string name="section_privacy">Privacy</string>
+    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram, LinkedIn and Chrome — the system enforces that list. Nothing is stored except the switches above.</string>
+</resources>

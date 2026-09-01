@@ -1,0 +1,13 @@
+# Build output
+build/
+.gradle/
+*.apk
+*.aab
+
+# Local machine paths — sdk.dir differs per checkout
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store

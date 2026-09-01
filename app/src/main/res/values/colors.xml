@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same green as the browser extension's fork branding. -->
+    <color name="accent">#00964F</color>
+    <color name="accent_bright">#3DDC84</color>
+    <color name="ic_launcher_background">#0E1712</color>
+    <color name="cover">#111517</color>
+</resources>
