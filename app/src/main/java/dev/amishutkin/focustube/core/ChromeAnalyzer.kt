@@ -30,6 +30,13 @@ object ChromeAnalyzer {
     /** Names in the site's own navigation, used to find where the page's content stops. */
     private val NAV_ITEMS = setOf("Home", "Explore", "Reels", "Messages", "Search", "Instagram")
 
+    /**
+     * The stories row, which sits above the first post. It is kept by default, exactly as
+     * it is in the app — an earlier version swept it up in the "everything above the
+     * first post" fragment and covered it, which the native side never did.
+     */
+    private val STORY = Regex("""^(?:.* )?Your story$|^Story by .+""")
+
     /** Avatars closer together than this belong to the same header — a collaboration. */
     private const val SAME_HEADER = 140
 
@@ -67,7 +74,8 @@ object ChromeAnalyzer {
         settings: Settings = Settings(),
         page: Page = pageOf(url(root)),
     ): FeedScan {
-        if (page == Page.OTHER) return FeedScan.none(TargetApp.CHROME)
+        // The browser is only read for Instagram, so Instagram's own switch governs it.
+        if (!settings.instagram || page == Page.OTHER) return FeedScan.none(TargetApp.CHROME)
 
         val web = root.walk().firstOrNull { it.className?.endsWith("WebView") == true }
             ?: return FeedScan.none(TargetApp.CHROME)
@@ -116,16 +124,29 @@ object ChromeAnalyzer {
         val heads = headerTops(labelled).filter { it in content.top until content.bottom }
 
         val items = mutableListOf<FeedItem>()
+
+        val stories = storiesRow(labelled, content)
+        if (stories != null) {
+            items += FeedItem(
+                stories,
+                if (settings.hideStoriesTray) Verdict.HIDE else Verdict.KEEP,
+                Reason.STORIES_TRAY,
+            )
+        }
+
         // Above the first avatar is the tail of a post whose header has scrolled away.
         // Same as the native feed: covered, and left for the ledger to recognise.
+        val fragmentTop = maxOf(content.top, stories?.bottom ?: content.top)
         val firstHead = heads.firstOrNull()
-        if (firstHead == null || firstHead > content.top + MIN_FRAGMENT) {
+        if (firstHead == null || firstHead > fragmentTop + MIN_FRAGMENT) {
             val bottom = firstHead ?: content.bottom
-            items += FeedItem(
-                Bounds(content.left, content.top, content.right, bottom),
-                Verdict.UNKNOWN,
-                Reason.OFF_SCREEN_HEADER,
-            )
+            if (bottom > fragmentTop + MIN_FRAGMENT) {
+                items += FeedItem(
+                    Bounds(content.left, fragmentTop, content.right, bottom),
+                    Verdict.UNKNOWN,
+                    Reason.OFF_SCREEN_HEADER,
+                )
+            }
         }
         for ((index, top) in heads.withIndex()) {
             val bottom = heads.getOrNull(index + 1) ?: content.bottom
@@ -186,6 +207,15 @@ object ChromeAnalyzer {
             bottom ?: web.bounds.bottom,
         )
     }
+
+    /** The row of story bubbles above the feed, if any of it is on screen. */
+    private fun storiesRow(labelled: List<Pair<UiNode, String>>, content: Bounds): Bounds? =
+        labelled
+            .filter { (node, text) -> STORY.matches(text) && node.bounds.top >= content.top }
+            .map { it.first.bounds }
+            .reduceOrNull { a, b -> a.union(b) }
+            ?.let { Bounds(content.left, it.top, content.right, it.bottom) }
+            ?.takeIf { !it.isEmpty && it.bottom <= content.bottom }
 
     private fun headerTops(labelled: List<Pair<UiNode, String>>): List<Int> {
         val tops = labelled

@@ -16,6 +16,10 @@ class SettingsStore(context: Context) {
         context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
     fun load() = Settings(
+        instagram = prefs.getBoolean(INSTAGRAM, true),
+        linkedIn = prefs.getBoolean(LINKEDIN, true),
+        youtube = prefs.getBoolean(YOUTUBE, true),
+        lockedUntil = prefs.getLong(LOCKED_UNTIL, 0L),
         hideSuggested = prefs.getBoolean(HIDE_SUGGESTED, true),
         hidePromoted = prefs.getBoolean(HIDE_PROMOTED, true),
         hideNetworkActivity = prefs.getBoolean(HIDE_ACTIVITY, false),
@@ -28,6 +32,10 @@ class SettingsStore(context: Context) {
 
     fun save(settings: Settings) {
         prefs.edit()
+            .putBoolean(INSTAGRAM, settings.instagram)
+            .putBoolean(LINKEDIN, settings.linkedIn)
+            .putBoolean(YOUTUBE, settings.youtube)
+            .putLong(LOCKED_UNTIL, settings.lockedUntil)
             .putBoolean(HIDE_SUGGESTED, settings.hideSuggested)
             .putBoolean(HIDE_PROMOTED, settings.hidePromoted)
             .putBoolean(HIDE_ACTIVITY, settings.hideNetworkActivity)
@@ -51,6 +59,10 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val NAME = "focustube.settings"
+        const val INSTAGRAM = "app_instagram"
+        const val LINKEDIN = "app_linkedin"
+        const val YOUTUBE = "app_youtube"
+        const val LOCKED_UNTIL = "locked_until"
         const val HIDE_SUGGESTED = "hide_suggested"
         const val HIDE_PROMOTED = "hide_promoted"
         const val HIDE_ACTIVITY = "hide_network_activity"

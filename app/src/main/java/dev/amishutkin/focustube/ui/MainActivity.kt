@@ -3,31 +3,40 @@ package dev.amishutkin.focustube.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings as AndroidSettings
 import android.text.TextUtils
 import android.widget.Button
 import android.widget.CompoundButton
+import android.widget.NumberPicker
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
 import dev.amishutkin.focustube.R
 import dev.amishutkin.focustube.core.Settings
 import dev.amishutkin.focustube.platform.FocusAccessibilityService
 import dev.amishutkin.focustube.platform.SettingsStore
+import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
 
     private lateinit var store: SettingsStore
     private lateinit var status: TextView
     private lateinit var statusHint: TextView
+    private lateinit var lockStatus: TextView
+    private lateinit var lockMinutes: NumberPicker
 
-    private lateinit var suggested: Switch
-    private lateinit var promoted: Switch
-    private lateinit var activity: Switch
-    private lateinit var modules: Switch
-    private lateinit var stories: Switch
-    private lateinit var reels: Switch
-    private lateinit var explore: Switch
-    private lateinit var shorts: Switch
+    /** Every switch, paired with the field of [Settings] it drives. */
+    private lateinit var switches: List<Pair<Switch, (Settings, Boolean) -> Settings>>
+
+    private val ticker = Handler(Looper.getMainLooper())
+    private val tick = object : Runnable {
+        override fun run() {
+            showLock()
+            ticker.postDelayed(this, TimeUnit.SECONDS.toMillis(20))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,14 +45,7 @@ class MainActivity : Activity() {
 
         status = findViewById(R.id.status)
         statusHint = findViewById(R.id.statusHint)
-        suggested = findViewById(R.id.optSuggested)
-        promoted = findViewById(R.id.optPromoted)
-        activity = findViewById(R.id.optActivity)
-        modules = findViewById(R.id.optModules)
-        stories = findViewById(R.id.optStories)
-        reels = findViewById(R.id.optReels)
-        explore = findViewById(R.id.optExplore)
-        shorts = findViewById(R.id.optShorts)
+        lockStatus = findViewById(R.id.lockStatus)
 
         findViewById<Button>(R.id.openSettings).setOnClickListener {
             startActivity(
@@ -52,20 +54,22 @@ class MainActivity : Activity() {
             )
         }
 
-        val current = store.load()
-        suggested.isChecked = current.hideSuggested
-        promoted.isChecked = current.hidePromoted
-        activity.isChecked = current.hideNetworkActivity
-        modules.isChecked = current.hideFeedModules
-        stories.isChecked = current.hideStoriesTray
-        reels.isChecked = current.hideReels
-        explore.isChecked = current.hideExplore
-        shorts.isChecked = current.hideShorts
+        switches = listOf(
+            sw(R.id.optInstagram) { s, v -> s.copy(instagram = v) },
+            sw(R.id.optLinkedIn) { s, v -> s.copy(linkedIn = v) },
+            sw(R.id.optYouTube) { s, v -> s.copy(youtube = v) },
+            sw(R.id.optSuggested) { s, v -> s.copy(hideSuggested = v) },
+            sw(R.id.optPromoted) { s, v -> s.copy(hidePromoted = v) },
+            sw(R.id.optReels) { s, v -> s.copy(hideReels = v) },
+            sw(R.id.optExplore) { s, v -> s.copy(hideExplore = v) },
+            sw(R.id.optShorts) { s, v -> s.copy(hideShorts = v) },
+            sw(R.id.optModules) { s, v -> s.copy(hideFeedModules = v) },
+            sw(R.id.optActivity) { s, v -> s.copy(hideNetworkActivity = v) },
+            sw(R.id.optStories) { s, v -> s.copy(hideStoriesTray = v) },
+        )
 
-        val onToggle = CompoundButton.OnCheckedChangeListener { _, _ -> persist() }
-        for (toggle in listOf(suggested, promoted, activity, modules, stories, reels, explore, shorts)) {
-            toggle.setOnCheckedChangeListener(onToggle)
-        }
+        setUpLock()
+        showSettings(store.load())
     }
 
     override fun onResume() {
@@ -73,21 +77,75 @@ class MainActivity : Activity() {
         val enabled = isServiceEnabled()
         status.setText(if (enabled) R.string.status_on else R.string.status_off)
         statusHint.visibility = if (enabled) TextView.GONE else TextView.VISIBLE
+        showSettings(store.load())
+        ticker.removeCallbacks(tick)
+        ticker.post(tick)
     }
 
-    private fun persist() {
-        store.save(
-            Settings(
-                hideSuggested = suggested.isChecked,
-                hidePromoted = promoted.isChecked,
-                hideNetworkActivity = activity.isChecked,
-                hideStoriesTray = stories.isChecked,
-                hideReels = reels.isChecked,
-                hideShorts = shorts.isChecked,
-                hideExplore = explore.isChecked,
-                hideFeedModules = modules.isChecked,
-            ),
-        )
+    override fun onPause() {
+        super.onPause()
+        ticker.removeCallbacks(tick)
+    }
+
+    private fun sw(id: Int, apply: (Settings, Boolean) -> Settings) =
+        findViewById<Switch>(id) to apply
+
+    private fun setUpLock() {
+        lockMinutes = findViewById(R.id.lockMinutes)
+        val choices = intArrayOf(15, 30, 45, 60, 90, 120, 180, 240)
+        lockMinutes.minValue = 0
+        lockMinutes.maxValue = choices.size - 1
+        lockMinutes.displayedValues = choices.map { it.toString() }.toTypedArray()
+        lockMinutes.value = choices.indexOf(DEFAULT_MINUTES)
+        lockMinutes.wrapSelectorWheel = false
+
+        findViewById<Button>(R.id.lockButton).setOnClickListener {
+            val minutes = choices[lockMinutes.value]
+            val until = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(minutes.toLong())
+            val current = store.load()
+            // Only ever extends. A lock you can cut short is not a lock.
+            store.save(current.copy(lockedUntil = maxOf(current.lockedUntil, until)))
+            showSettings(store.load())
+        }
+    }
+
+    /** Writes the switches from [settings] without the listeners firing back at us. */
+    private fun showSettings(settings: Settings) {
+        val locked = settings.lockedAt(System.currentTimeMillis())
+        for ((toggle, apply) in switches) {
+            toggle.setOnCheckedChangeListener(null)
+            toggle.isChecked = apply(settings, true) == settings
+            // While locked, a switch that is on cannot be turned off — but one that is
+            // off can still be turned on. The only thing being prevented is backing out.
+            toggle.isEnabled = !locked || !toggle.isChecked
+            toggle.setOnCheckedChangeListener(onToggle(apply))
+        }
+        showLock()
+    }
+
+    private fun onToggle(apply: (Settings, Boolean) -> Settings) =
+        CompoundButton.OnCheckedChangeListener { _, checked ->
+            val current = store.load()
+            val next = apply(current, checked)
+            if (current.lockedAt(System.currentTimeMillis()) && current.loosenedBy(next)) {
+                Toast.makeText(this, R.string.lock_refused, Toast.LENGTH_SHORT).show()
+                showSettings(current)
+                return@OnCheckedChangeListener
+            }
+            store.save(next)
+            showSettings(next)
+        }
+
+    private fun showLock() {
+        val settings = store.load()
+        val remaining = settings.lockedUntil - System.currentTimeMillis()
+        if (remaining <= 0) {
+            lockStatus.visibility = TextView.GONE
+            return
+        }
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(remaining) + 1
+        lockStatus.visibility = TextView.VISIBLE
+        lockStatus.text = getString(R.string.lock_active, minutes.toInt())
     }
 
     /** Whether the user has granted accessibility access, read from the system's own list. */
@@ -100,5 +158,9 @@ class MainActivity : Activity() {
         val splitter = TextUtils.SimpleStringSplitter(':')
         splitter.setString(enabled)
         return splitter.any { it.equals(expected, ignoreCase = true) }
+    }
+
+    private companion object {
+        const val DEFAULT_MINUTES = 60
     }
 }

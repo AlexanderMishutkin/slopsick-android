@@ -184,6 +184,22 @@ Needs JDK 17+ and an Android SDK with platform 36.
 Then install it, and turn it on under Settings → Accessibility → Installed apps →
 FocusTube feed filter.
 
+## Settings
+
+Three master switches, one per app — Instagram (which also covers instagram.com in
+Chrome), LinkedIn, YouTube. Off means that app is not touched at all. Under them are the
+individual switches for what to cover.
+
+### The lock
+
+Locks the switches for a chosen time, an hour by default. While it holds, **a switch that
+is on cannot be turned off**; switching more *on* is still allowed, and so is extending
+the lock. Only the moment of weakness is prevented.
+
+It is a promise the app makes to you, not a security measure. Android's own accessibility
+toggle is always there and nothing here tries to make that harder — a lock that fought
+the user for control of their own phone would be a worse thing than the feed.
+
 **It runs on its own.** An accessibility service is bound by the system, not by the app's
 UI: once switched on it runs whenever the phone is on, from boot, whether or not the
 settings screen has ever been opened, and it comes straight back if its process is killed.
@@ -192,7 +208,7 @@ allowed to see sends an event. Turning it off is the accessibility toggle, nothi
 
 ## Tests
 
-85 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+97 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
 interface rather than `AccessibilityNodeInfo`, so they can be run against 46 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
@@ -247,6 +263,7 @@ Being specific, because the gaps matter more than the features:
   whose items describe themselves as "... - play Short". Narrow enough not to catch a
   video titled "I wore Shorts for 30 days", but "play Short" is translated, so in another
   language only the heading would be covered. Verified against a real shelf on device.
+- **The stories row is kept on the web**, matching the app, where it is kept by default.
 - **The web feed leaves a thin strip below the site header uncovered** — the region
   starts at the header's reported bottom and the sticky header overlaps a little further.
 - **A strip under the status bar can leak.** When an app draws its content edge to edge,

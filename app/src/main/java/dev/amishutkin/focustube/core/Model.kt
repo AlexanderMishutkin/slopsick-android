@@ -121,6 +121,10 @@ data class FeedScan(
 
 /** User-facing switches. Defaults match the browser extension's shipped defaults. */
 data class Settings(
+    /** Master switch per app. Off means this app is not touched at all. */
+    val instagram: Boolean = true,
+    val linkedIn: Boolean = true,
+    val youtube: Boolean = true,
     /** Hide posts from accounts you do not follow. This is the whole point of the app. */
     val hideSuggested: Boolean = true,
     /** Hide ads. Untested against a real ad — see README. */
@@ -147,4 +151,33 @@ data class Settings(
     val hideExplore: Boolean = true,
     /** Hide the interstitial cards LinkedIn injects ("People you may know", job prompts). */
     val hideFeedModules: Boolean = true,
-)
+
+    /**
+     * Wall-clock time until which the switches cannot be turned down, as
+     * `System.currentTimeMillis()`.
+     *
+     * The point of a lock you can undo in two taps is hard to see, so while it holds, a
+     * switch that is on cannot be turned off. Turning *more* on is always allowed, and so
+     * is extending the lock — the only thing being prevented is the moment of weakness.
+     *
+     * This is a promise the app makes to you, not a security measure: the accessibility
+     * toggle in Android's own settings is always there, and nothing here tries to make
+     * that harder.
+     */
+    val lockedUntil: Long = 0L,
+) {
+    fun lockedAt(now: Long) = now < lockedUntil
+
+    /** True when [next] would reduce what is covered — the thing a lock prevents. */
+    fun loosenedBy(next: Settings): Boolean =
+        FLAGS.any { flag -> flag(this) && !flag(next) }
+
+    private companion object {
+        val FLAGS: List<(Settings) -> Boolean> = listOf(
+            { it.instagram }, { it.linkedIn }, { it.youtube },
+            { it.hideSuggested }, { it.hidePromoted }, { it.hideNetworkActivity },
+            { it.hideStoriesTray }, { it.hideReels }, { it.hideShorts },
+            { it.hideExplore }, { it.hideFeedModules },
+        )
+    }
+}

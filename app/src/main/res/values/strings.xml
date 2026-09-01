@@ -10,6 +10,20 @@
     <string name="status_off_hint">FocusTube needs accessibility access to read what is on screen. Turn it on under Installed apps.</string>
     <string name="open_settings">Open accessibility settings</string>
 
+    <string name="section_apps">Apps</string>
+    <string name="opt_instagram">Instagram</string>
+    <string name="opt_linkedin">LinkedIn</string>
+    <string name="opt_youtube">YouTube</string>
+    <string name="apps_hint">Off means the app is not touched at all. Instagram covers the app and instagram.com in Chrome.</string>
+
+    <string name="section_lock">Lock</string>
+    <string name="lock_hint">While locked, nothing can be switched off. You can still switch more on, and you can extend the lock.</string>
+    <string name="lock_button">Lock</string>
+    <string name="lock_minutes">minutes</string>
+    <string name="lock_active">Locked for %1$d more minutes</string>
+    <string name="lock_refused">Locked — this cannot be turned off yet</string>
+    <string name="lock_honest">This is a promise the app makes to you, not a security measure: Android\'s own accessibility switch is always there.</string>
+
     <string name="section_what">What to cover</string>
     <string name="opt_suggested">Posts from accounts you don\'t follow</string>
     <string name="opt_promoted">Ads and promoted posts</string>

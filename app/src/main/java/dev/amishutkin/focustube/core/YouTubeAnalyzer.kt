@@ -38,6 +38,7 @@ object YouTubeAnalyzer {
     private const val MAX_HEADING = 24
 
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
+        if (!settings.youtube) return FeedScan.none(TargetApp.YOUTUBE)
         if (!settings.hideShorts) return FeedScan.none(TargetApp.YOUTUBE)
 
         val blockers = listOfNotNull(shortsTab(root)?.takeIf { !it.isEmpty })

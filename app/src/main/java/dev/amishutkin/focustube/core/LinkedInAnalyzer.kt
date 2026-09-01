@@ -72,6 +72,7 @@ object LinkedInAnalyzer {
     private const val MAX_CHROME_LABEL = 80
 
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
+        if (!settings.linkedIn) return FeedScan.none(TargetApp.LINKEDIN)
         val feedTab = root.findById(FEED_TAB)?.takeIf { it.selected }
             ?: return FeedScan.none(TargetApp.LINKEDIN)
 

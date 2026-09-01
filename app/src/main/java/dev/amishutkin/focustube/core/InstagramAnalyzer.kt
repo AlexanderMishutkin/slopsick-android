@@ -45,6 +45,7 @@ object InstagramAnalyzer {
     private val SPONSORED_LABELS = listOf("Sponsored", "Paid partnership")
 
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
+        if (!settings.instagram) return FeedScan.none(TargetApp.INSTAGRAM)
         // The Reels tab is dealt with on every Instagram screen, not just the feed:
         // Instagram opens straight into Reels often enough that only covering the button
         // when a feed happens to be on screen would miss the case that matters.

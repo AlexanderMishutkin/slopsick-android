@@ -4,4 +4,21 @@
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:colorPrimary">@color/accent</item>
     </style>
+
+    <style name="SectionHeading">
+        <item name="android:layout_marginTop">28dp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Row">
+        <item name="android:layout_marginTop">10dp</item>
+    </style>
+
+    <style name="Caption">
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:textSize">12sp</item>
+    </style>
 </resources>

@@ -54,10 +54,26 @@ class ChromeAnalyzerTest {
     fun `the region does not shrink to whatever avatar happens to be visible`() {
         val scan = ChromeAnalyzer.analyze(page)
         assertEquals(333, scan.feedBounds!!.top)
-        val fragment = scan.items.first()
-        assertEquals(Reason.OFF_SCREEN_HEADER, fragment.reason)
+        val fragment = scan.items.single { it.reason == Reason.OFF_SCREEN_HEADER }
         assertEquals("the space above the first post is covered, not ignored",
             Verdict.UNKNOWN, fragment.verdict)
+    }
+
+    /**
+     * The stories row is kept, exactly as it is in the app. An earlier version swept it
+     * into the "everything above the first post" fragment and covered it, which the
+     * native side never did.
+     */
+    @Test
+    fun `the stories row is kept, as it is in the app`() {
+        val stories = ChromeAnalyzer.analyze(page).items
+            .single { it.reason == Reason.STORIES_TRAY }
+        assertEquals(Verdict.KEEP, stories.verdict)
+        assertEquals(346, stories.bounds.top)
+
+        val hidden = ChromeAnalyzer.analyze(page, Settings(hideStoriesTray = true)).items
+            .single { it.reason == Reason.STORIES_TRAY }
+        assertEquals(Verdict.HIDE, hidden.verdict)
     }
 
     @Test
