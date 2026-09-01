@@ -58,6 +58,26 @@ class OverlayPlanTest {
     }
 
     @Test
+    fun `a band grows while the page is moving, but never past the feed`() {
+        val scan = scanOf(item(400, 700, Verdict.KEEP))
+        val band = Bounds(0, 700, 1000, 1100)
+        val grown = OverlayPlan.grown(band, scan)
+        assertEquals("grown upwards", 650, grown.top)
+        assertEquals("and clamped to the bottom of the feed", feed.bottom, grown.bottom)
+    }
+
+    @Test
+    fun `a blanket cover grows freely, since there is nothing to protect`() {
+        val blanket = FeedScan(
+            TargetApp.INSTAGRAM, null, emptyList(),
+            Surface.REELS, listOf(Bounds(0, 500, 1000, 900)),
+        )
+        val grown = OverlayPlan.grown(Bounds(0, 500, 1000, 900), blanket)
+        assertEquals(450, grown.top)
+        assertEquals(950, grown.bottom)
+    }
+
+    @Test
     fun `no feed means no overlay`() {
         assertTrue(OverlayPlan.cover(FeedScan.none(TargetApp.INSTAGRAM)).isEmpty())
     }

@@ -46,8 +46,8 @@ class FocusAccessibilityService : AccessibilityService() {
     /** When the feed last moved, so the labels can wait for it to stop. */
     private var lastScrollAt: Long = 0L
 
-    /** The site Chrome last showed in its address bar, while Chrome stays in front. */
-    private var chromeHost: String? = null
+    /** The page Chrome last showed in its address bar, while Chrome stays in front. */
+    private var chromePage: ChromeAnalyzer.Page = ChromeAnalyzer.Page.OTHER
 
     private val refresh = Runnable { update() }
 
@@ -75,7 +75,7 @@ class FocusAccessibilityService : AccessibilityService() {
                 TargetApp.of(front) != currentApp -> return clear()
                 else -> misses = 0
             }
-            handler.postDelayed(this, WATCHDOG_MS)
+            handler.postDelayed(this, if (currentApp == TargetApp.CHROME) CHROME_WATCHDOG_MS else WATCHDOG_MS)
         }
     }
 
@@ -104,7 +104,7 @@ class FocusAccessibilityService : AccessibilityService() {
             // tells us anything about this one.
             ledger = FeedLedger()
             lastFeedBounds = null
-            chromeHost = null
+            chromePage = ChromeAnalyzer.Page.OTHER
             overlay.hide()
         }
 
@@ -118,8 +118,16 @@ class FocusAccessibilityService : AccessibilityService() {
         }
 
         handler.removeCallbacks(refresh)
-        handler.postDelayed(refresh, DEBOUNCE_MS)
+        handler.postDelayed(refresh, debounceFor(app))
     }
+
+    /**
+     * Chrome has to build an accessibility tree for an entire web page on every read, and
+     * asking eight times a second visibly hurts it. The native feeds are cheap by
+     * comparison and want the responsiveness.
+     */
+    private fun debounceFor(app: TargetApp) =
+        if (app == TargetApp.CHROME) CHROME_DEBOUNCE_MS else DEBOUNCE_MS
 
     override fun onInterrupt() = clear()
 
@@ -155,10 +163,10 @@ class FocusAccessibilityService : AccessibilityService() {
             TargetApp.YOUTUBE -> YouTubeAnalyzer.analyze(root, settings)
             TargetApp.CHROME -> {
                 // Chrome's address bar disappears on scroll, taking the only evidence of
-                // which site this is with it. Remember it for as long as Chrome is in
+                // which page this is with it. Remember it for as long as Chrome is in
                 // front; leaving Chrome clears it, below.
-                ChromeAnalyzer.host(root)?.let { chromeHost = it }
-                ChromeAnalyzer.analyze(root, settings, ChromeAnalyzer.isInstagram(chromeHost))
+                ChromeAnalyzer.url(root)?.let { chromePage = ChromeAnalyzer.pageOf(it) }
+                ChromeAnalyzer.analyze(root, settings, chromePage)
             }
         }
 
@@ -187,6 +195,10 @@ class FocusAccessibilityService : AccessibilityService() {
             handler.postDelayed(refresh, SETTLE_MS)
         }
         val details = if (settled) OverlayPlan.details(tracked) else emptyList()
+        // While the page is moving, the bands are always a frame or two behind where the
+        // content now is, and the gap shows as a sliver of whatever was being covered.
+        // Growing them absorbs the lag; they snap back the moment it settles.
+        val painted = if (settled) bands else bands.map { OverlayPlan.grown(it, tracked) }
         if (dev.amishutkin.focustube.BuildConfig.DEBUG) {
             android.util.Log.d(
                 "FocusTube",
@@ -195,7 +207,7 @@ class FocusAccessibilityService : AccessibilityService() {
             )
         }
         lastBlockers = blockers
-        overlay.show(app, tracked.surface, bands, details, blockers)
+        overlay.show(app, tracked.surface, painted, details, blockers)
         armWatchdog(bands.isNotEmpty() || blockers.isNotEmpty())
     }
 
@@ -212,7 +224,7 @@ class FocusAccessibilityService : AccessibilityService() {
         currentApp = null
         lastFeedBounds = null
         lastBlockers = emptyList()
-        chromeHost = null
+        chromePage = ChromeAnalyzer.Page.OTHER
         if (::overlay.isInitialized) overlay.hide()
     }
 
@@ -222,12 +234,16 @@ class FocusAccessibilityService : AccessibilityService() {
          * the feed does not sit under a blanket cover after it settles.
          */
         const val DEBOUNCE_MS = 120L
+        const val CHROME_DEBOUNCE_MS = 350L
 
         /** How long to wait before re-reading a window that could not be read. */
         const val RETRY_MS = 250L
 
         /** How often to check we are still in the app we are covering. */
         const val WATCHDOG_MS = 400L
+
+        /** Each poll is another full tree read; Chrome cannot afford them as often. */
+        const val CHROME_WATCHDOG_MS = 900L
 
         /** How long after the last scroll the outlines and labels are drawn. */
         const val SETTLE_MS = 350L

@@ -14,12 +14,12 @@ class ChromeAnalyzerTest {
         val scan = ChromeAnalyzer.analyze(page)
         assertEquals(TargetApp.CHROME, scan.app)
         assertTrue(scan.hasFeed)
-        assertEquals(2, scan.items.size)
+        assertEquals(2, scan.items.count { it.author != null })
     }
 
     @Test
     fun `a post from an account you follow is kept`() {
-        val post = ChromeAnalyzer.analyze(page).items.first()
+        val post = ChromeAnalyzer.analyze(page).items.first { it.reason == Reason.FOLLOWED }
         assertEquals(Reason.FOLLOWED, post.reason)
         assertEquals(Verdict.KEEP, post.verdict)
     }
@@ -40,9 +40,64 @@ class ChromeAnalyzerTest {
     fun `the site's own navigation is left alone`() {
         val scan = ChromeAnalyzer.analyze(page)
         val feed = scan.feedBounds!!
-        assertEquals("the feed starts at the first post, not the top of the page", 682, feed.top)
-        assertEquals("and stops above the bottom navigation", 2207, feed.bottom)
-        assertTrue(OverlayPlan.cover(scan).all { it.top >= 682 && it.bottom <= 2207 })
+        assertEquals("below the site's header", 333, feed.top)
+        assertEquals("above the site's bottom navigation", 2207, feed.bottom)
+        assertTrue(OverlayPlan.cover(scan).all { it.top >= 333 && it.bottom <= 2207 })
+    }
+
+    /**
+     * An earlier version anchored the region to the first avatar it could see, so as soon
+     * as a post scrolled far enough for its avatar to leave, the top of the screen went
+     * uncovered — the feed "opened up" while you were scrolling past it.
+     */
+    @Test
+    fun `the region does not shrink to whatever avatar happens to be visible`() {
+        val scan = ChromeAnalyzer.analyze(page)
+        assertEquals(333, scan.feedBounds!!.top)
+        val fragment = scan.items.first()
+        assertEquals(Reason.OFF_SCREEN_HEADER, fragment.reason)
+        assertEquals("the space above the first post is covered, not ignored",
+            Verdict.UNKNOWN, fragment.verdict)
+    }
+
+    @Test
+    fun `explore is covered wall to wall`() {
+        val scan = ChromeAnalyzer.analyze(XmlUiNode.fixture("chromeweb-explore.xml"))
+        assertEquals(Surface.EXPLORE, scan.surface)
+        val cover = OverlayPlan.cover(scan).single()
+        assertEquals(325, cover.top)
+        assertEquals(2207, cover.bottom)
+    }
+
+    @Test
+    fun `reels is covered wall to wall`() {
+        val scan = ChromeAnalyzer.analyze(XmlUiNode.fixture("chromeweb-reels.xml"))
+        assertEquals(Surface.REELS, scan.surface)
+        assertTrue(OverlayPlan.cover(scan).single().bottom <= 2207)
+    }
+
+    @Test
+    fun `the page is read from the address bar, not guessed`() {
+        assertEquals(ChromeAnalyzer.Page.FEED, ChromeAnalyzer.pageOf("instagram.com"))
+        assertEquals(ChromeAnalyzer.Page.FEED, ChromeAnalyzer.pageOf("instagram.com/"))
+        assertEquals(ChromeAnalyzer.Page.EXPLORE, ChromeAnalyzer.pageOf("instagram.com/explore/"))
+        assertEquals(ChromeAnalyzer.Page.REELS, ChromeAnalyzer.pageOf("instagram.com/reels/abc/"))
+        // A profile or a single post is something you navigated to on purpose.
+        assertEquals(ChromeAnalyzer.Page.OTHER, ChromeAnalyzer.pageOf("instagram.com/nasa/"))
+        assertEquals(ChromeAnalyzer.Page.OTHER, ChromeAnalyzer.pageOf("example.com"))
+        assertEquals(ChromeAnalyzer.Page.OTHER, ChromeAnalyzer.pageOf(null))
+    }
+
+    @Test
+    fun `explore and reels follow their own switches`() {
+        val explore = ChromeAnalyzer.analyze(
+            XmlUiNode.fixture("chromeweb-explore.xml"), Settings(hideExplore = false),
+        )
+        assertTrue(explore.isEmpty)
+        val reels = ChromeAnalyzer.analyze(
+            XmlUiNode.fixture("chromeweb-reels.xml"), Settings(hideReels = false),
+        )
+        assertTrue(reels.isEmpty)
     }
 
     @Test
@@ -84,7 +139,6 @@ class ChromeAnalyzerTest {
     @Test
     fun `turning the filter off keeps the suggested post`() {
         val scan = ChromeAnalyzer.analyze(page, Settings(hideSuggested = false))
-        assertTrue(scan.items.all { it.verdict == Verdict.KEEP })
-        assertTrue(OverlayPlan.cover(scan).isEmpty())
+        assertTrue(scan.items.filter { it.author != null }.all { it.verdict == Verdict.KEEP })
     }
 }

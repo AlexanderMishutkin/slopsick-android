@@ -61,7 +61,9 @@ to forget used to be.
 Once the screen stops moving, each covered thing gets an outline and a label — "Suggested
 post hidden", "Ad hidden", "Explore hidden". During a scroll the cover is a flat sheet:
 the bounds are already a frame or two out of date, and an outline that lags is more
-distracting than none.
+distracting than none. It also **grows by a quarter while the page moves**, because that
+same lag otherwise shows as a strip of the very thing being covered — a Short playing
+along the edge of its own cover. It snaps back the moment scrolling stops.
 
 ### Explore
 
@@ -87,20 +89,30 @@ positives.
 
 ### Chrome
 
-instagram.com in the mobile browser. Chrome puts the whole page into the accessibility
-tree and its address bar alongside, so both "which site is this" and "what is on it" are
-answerable — but the page arrives as a deep pile of anonymous `View`s with no ids at all.
-A post is not a node; it is the stretch of page between one author's avatar and the next.
+instagram.com in the mobile browser — the feed, Explore and Reels. Chrome puts the whole
+page into the accessibility tree and its address bar alongside, so both "which page is
+this" and "what is on it" are answerable. The page itself arrives as a deep pile of
+anonymous `View`s with no ids at all, so a post is not a node: it is the stretch of page
+between one author's avatar and the next.
 
-Two consequences worth knowing:
+Three things worth knowing:
 
-- **The covered region runs from the first avatar to the last post, and no further.** The
-  site's own header, the stories row and the bottom navigation are page content, not app
-  chrome — covering the viewport the way the native analyzers do would black out the
-  site's navigation and strand you.
-- **The site is remembered, not re-checked.** Chrome hides its toolbar the moment you
-  scroll, taking the address bar with it. Checking every frame means the filter switches
-  itself off as soon as you start reading.
+- **The covered region sits between the site's own two navigation bars.** Those are page
+  content rather than app chrome, and covering them would leave you unable to go
+  anywhere. An earlier version anchored the region to the first avatar it could see, and
+  so uncovered the top of the screen as soon as a post scrolled far enough for its avatar
+  to leave — the feed "opened up" exactly while you were scrolling past it.
+- **Which page you are on comes from the address bar, and is remembered.** Chrome hides
+  its toolbar the moment you scroll, taking the URL with it; re-checking every frame
+  switches the filter off as soon as you start reading. `/explore` and `/reels` are
+  covered wall to wall; a profile or a single post is something you navigated to on
+  purpose and is left alone.
+- **Chrome is read less often than the native apps** — every 350ms rather than 120ms, and
+  the foreground check every 900ms rather than 400ms. Each read makes Chrome build an
+  accessibility tree for a whole web page, and asking eight times a second visibly hurts
+  it.
+
+Only instagram.com. LinkedIn and YouTube on the mobile web are not read.
 
 Every signal here is a word — Chrome exposes the page's accessible names, the same
 strings a screen reader announces, and those are translated with the site.
@@ -172,6 +184,12 @@ Needs JDK 17+ and an Android SDK with platform 36.
 Then install it, and turn it on under Settings → Accessibility → Installed apps →
 FocusTube feed filter.
 
+**It runs on its own.** An accessibility service is bound by the system, not by the app's
+UI: once switched on it runs whenever the phone is on, from boot, whether or not the
+settings screen has ever been opened, and it comes straight back if its process is killed.
+There is no notification and no wake lock — it only wakes when one of the four apps it is
+allowed to see sends an event. Turning it off is the accessibility toggle, nothing else.
+
 ## Tests
 
 78 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
@@ -229,6 +247,8 @@ Being specific, because the gaps matter more than the features:
   whose items describe themselves as "... - play Short". Narrow enough not to catch a
   video titled "I wore Shorts for 30 days", but "play Short" is translated, so in another
   language only the heading would be covered. Verified against a real shelf on device.
+- **The web feed leaves a thin strip below the site header uncovered** — the region
+  starts at the header's reported bottom and the sticky header overlaps a little further.
 - **A strip under the status bar can leak.** When an app draws its content edge to edge,
   the top ~60px sits under the transparent status bar, and the cover stops there because
   painting over the clock is worse.
