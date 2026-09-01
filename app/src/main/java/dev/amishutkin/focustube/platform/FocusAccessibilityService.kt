@@ -50,6 +50,7 @@ class FocusAccessibilityService : AccessibilityService() {
         override fun run() {
             val root = rootInActiveWindow
             val front = root?.packageName?.toString()
+            root?.recycleCompat()
             when {
                 front == null -> {
                     // Transiently unreadable inside the target app, or a window that is
@@ -118,6 +119,7 @@ class FocusAccessibilityService : AccessibilityService() {
             return clear()
         }
         val root = SnapshotNode.of(live)
+        live?.recycleCompat()
         if (root == null) {
             // The window can be momentarily unreadable — mid-transition, or while the app
             // is busy. Leaving it here would strand whatever is on screen under the last

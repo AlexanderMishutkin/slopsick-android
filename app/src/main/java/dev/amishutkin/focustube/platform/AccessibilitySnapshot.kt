@@ -32,6 +32,7 @@ class SnapshotNode(
         private const val MAX_DEPTH = 60
         private const val MAX_NODES = 4000
 
+        /** Copies [root]; the caller keeps ownership of it, children are recycled here. */
         fun of(root: AccessibilityNodeInfo?): UiNode? {
             if (root == null) return null
             val budget = intArrayOf(MAX_NODES)
@@ -53,6 +54,7 @@ class SnapshotNode(
                     null
                 } ?: continue
                 copy(child, depth + 1, budget)?.let { children += it }
+                child.recycleCompat()
             }
 
             return SnapshotNode(

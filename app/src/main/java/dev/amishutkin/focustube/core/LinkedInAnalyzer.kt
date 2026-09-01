@@ -55,6 +55,15 @@ object LinkedInAnalyzer {
     private val VIEW_PROFILE = Regex("""^View (.+?)(?:’s|'s)? profile""")
     private val OTHER_DEGREE = Regex("""•\s*(2nd|3rd\+?)""")
 
+    /**
+     * Longest a label can be and still be part of the post's furniture rather than its
+     * body. Every LinkedIn signal is a string, and the post text is in the same list of
+     * strings — without this, somebody writing "Promoted to Senior Engineer" or "I
+     * commented on this last week" in a post would have it classified by its own prose.
+     * The fixtures cannot catch that, because the anonymiser replaces long bodies.
+     */
+    private const val MAX_CHROME_LABEL = 80
+
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
         val column = root.walk().firstOrNull { it.viewId?.endsWith(LAZY_COLUMN) == true }
             ?: return FeedScan.none(TargetApp.LINKEDIN)
@@ -70,7 +79,8 @@ object LinkedInAnalyzer {
     }
 
     private fun classify(item: UiNode, settings: Settings): FeedItem {
-        val labels = item.labels()
+        val all = item.labels()
+        val labels = all.filter { it.length <= MAX_CHROME_LABEL }
         val blob = labels.joinToString(" | ")
         val bounds = item.bounds
         // Only a name lifted from "View <name>'s profile" is stable and unique enough to
@@ -79,6 +89,9 @@ object LinkedInAnalyzer {
         // identity would inherit each other's verdicts.
         val profile = profileActorOf(labels)
         val actor = profile ?: looseActorOf(labels)
+        if (all.isEmpty()) {
+            return FeedItem(bounds, Verdict.UNKNOWN, Reason.NO_SIGNAL, null, null)
+        }
         val identity = profile?.let { "li:$it" }
 
         fun verdict(reason: Reason, hidden: Boolean) =
