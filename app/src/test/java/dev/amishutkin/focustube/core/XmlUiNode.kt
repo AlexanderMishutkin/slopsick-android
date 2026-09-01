@@ -19,6 +19,7 @@ class XmlUiNode(private val element: Element) : UiNode {
     override val text: String? = element.getAttribute("text").ifEmpty { null }
     override val contentDesc: String? = element.getAttribute("content-desc").ifEmpty { null }
     override val bounds: Bounds = parseBounds(element.getAttribute("bounds"))
+    override val selected: Boolean = element.getAttribute("selected") == "true"
 
     override val children: List<UiNode> by lazy {
         val kids = mutableListOf<UiNode>()

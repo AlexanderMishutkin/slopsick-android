@@ -21,6 +21,7 @@ class SnapshotNode(
     override val contentDesc: String?,
     override val bounds: Bounds,
     override val children: List<UiNode>,
+    override val selected: Boolean,
 ) : UiNode {
 
     companion object {
@@ -64,6 +65,7 @@ class SnapshotNode(
                 contentDesc = node.contentDescription?.toString(),
                 bounds = Bounds(rect.left, rect.top, rect.right, rect.bottom),
                 children = children,
+                selected = node.isSelected,
             )
         }
     }

@@ -27,6 +27,13 @@ object YouTubeAnalyzer {
      */
     private const val SHORTS = "Shorts"
 
+    /**
+     * A Shorts item describes itself: "<title>, <channel>, 4 days ago - play Short". The
+     * heading row and the grid rows beneath it are separate children of the feed, so
+     * matching the heading alone covers a caption and leaves the videos playing.
+     */
+    private const val SHORTS_ITEM = "play Short"
+
     /** Long enough to be a video title rather than a shelf heading. */
     private const val MAX_HEADING = 24
 
@@ -58,12 +65,36 @@ object YouTubeAnalyzer {
         )
     }
 
-    /** Rows of the home feed whose heading is exactly "Shorts". */
+    /**
+     * The Shorts shelves in the home feed, each as one region.
+     *
+     * A shelf is not one row. YouTube puts the "Shorts" heading in its own child of the
+     * feed and the videos in the next one or two, so the run has to be stitched back
+     * together — otherwise the caption is covered and the videos play on underneath.
+     */
     private fun shortsShelves(root: UiNode): List<Bounds> {
         val feed = root.findById(FEED) ?: return emptyList()
-        return feed.children.filter { row ->
-            !row.bounds.isEmpty && row.labels().any { it.length <= MAX_HEADING && it == SHORTS }
-        }.map { it.bounds }
+        val rows = feed.children.filter { !it.bounds.isEmpty }
+
+        val shelves = mutableListOf<Bounds>()
+        var run: Bounds? = null
+        for (row in rows) {
+            if (isShelfRow(row)) {
+                run = run?.union(row.bounds) ?: row.bounds
+            } else {
+                run?.let { shelves += it }
+                run = null
+            }
+        }
+        run?.let { shelves += it }
+        return shelves
+    }
+
+    private fun isShelfRow(row: UiNode): Boolean {
+        val labels = row.labels()
+        val heading = labels.any { it.length <= MAX_HEADING && it == SHORTS }
+        val items = labels.any { it.contains(SHORTS_ITEM) }
+        return heading || items
     }
 
     /** The Shorts entry in the bottom navigation, if it is on screen. */

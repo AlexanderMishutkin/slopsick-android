@@ -19,8 +19,14 @@ HANDLE_PATTERNS = [
     # caption row: "<handle> \"caption text..." and the bare handle button beside it
     re.compile(r'^([a-z0-9._]{2,30})\s+["\u201c]'),
     re.compile(r'^([a-z0-9._]{3,30})$'),
+    # Instagram on the mobile web, as Chrome reports it to a screen reader.
+    re.compile(r'^Story by ([a-z0-9._]{2,30}),'),
+    re.compile(r'^@([a-z0-9._]{2,30})$'),
 ]
 NAME_PATTERNS = [
+    re.compile(r"^(.+?)'s profile picture$"),
+    re.compile(r'^Photo by (.+?) on '),
+    re.compile(r'^Photo shared by (.+?) on '),
     re.compile(r'^Follow (.+)$'),
     re.compile(r'^Invite (.+) to connect$'),
     re.compile(r'^View (.+?)(?:’s|\'s) profile'),
@@ -45,11 +51,24 @@ FAKE_NAMES = ['Alba Rivers','Bruno Vale','Cora Finch','Dara Holt','Elio Marsh',
               'Kai Lorne','Lena Voss','Milo Prat','Nora Sage','Oren Diaz']
 
 
+# Nodes that hold something other than an identity and must be left alone. Chrome's
+# address bar is the obvious one: "instagram.com" looks exactly like a handle, and
+# scrubbing it turns the fixture into a page the analyzer cannot recognise.
+SKIP_IDS = ('/url_bar',)
+
+
+def skip(node):
+    rid = node.attrib.get('resource-id', '')
+    return any(rid.endswith(s) for s in SKIP_IDS)
+
+
 def collect(paths):
     handles, names = {}, {}
     for p in paths:
         root = ET.parse(p).getroot()
         for n in root.iter('node'):
+            if skip(n):
+                continue
             for k in ('text', 'content-desc'):
                 v = (n.attrib.get(k) or '').replace('\xa0', ' ').strip()
                 if not v:
@@ -100,6 +119,8 @@ def main():
     for p in paths:
         tree = ET.parse(p)
         for n in tree.getroot().iter('node'):
+            if skip(n):
+                continue
             for k in ('text', 'content-desc'):
                 if k in n.attrib:
                     n.attrib[k] = scrub(n.attrib[k], handles, names)

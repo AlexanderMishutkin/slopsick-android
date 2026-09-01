@@ -42,6 +42,9 @@ interface UiNode {
     val contentDesc: String?
     val bounds: Bounds
     val children: List<UiNode>
+
+    /** Whether the node is in a selected state — which tab of a tab bar is current. */
+    val selected: Boolean
 }
 
 /** Depth-first sequence over this node and everything under it. */

@@ -8,4 +8,4 @@
     android:notificationTimeout="100"
     android:summary="@string/service_summary"
     android:settingsActivity="dev.amishutkin.focustube.ui.MainActivity"
-    android:packageNames="com.instagram.android,com.linkedin.android,com.google.android.youtube" />
+    android:packageNames="com.instagram.android,com.linkedin.android,com.google.android.youtube,com.android.chrome" />

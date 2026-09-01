@@ -21,6 +21,13 @@ object LinkedInAnalyzer {
     private const val TOP_BAR = "home_top_bar"
     private const val BOTTOM_BAR = "home_bottom_bar"
 
+    /**
+     * Every LinkedIn tab is a lazy column — Jobs and Search look exactly like the feed
+     * from the tree's point of view. Which tab is current is the only thing that tells
+     * them apart, and job listings are not the feed's idea of what you should look at.
+     */
+    private const val FEED_TAB = "tab_feed"
+
     // --- localised signals -------------------------------------------------------
     // Everything below is language-dependent. Grouped here so the damage is visible
     // and so translating the app is a matter of extending one object.
@@ -65,9 +72,12 @@ object LinkedInAnalyzer {
     private const val MAX_CHROME_LABEL = 80
 
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
+        val feedTab = root.findById(FEED_TAB)?.takeIf { it.selected }
+            ?: return FeedScan.none(TargetApp.LINKEDIN)
+
         val column = root.walk().firstOrNull { it.viewId?.endsWith(LAZY_COLUMN) == true }
             ?: return FeedScan.none(TargetApp.LINKEDIN)
-        val content = contentRegion(root, column)
+        val content = contentRegion(root, column, feedTab)
         if (content.isEmpty) return FeedScan.none(TargetApp.LINKEDIN)
 
         val items = column.children
@@ -149,9 +159,15 @@ object LinkedInAnalyzer {
         labels.firstOrNull { it.contains("\u2022") && !it.startsWith("\u2022") }
             ?.substringBefore("\u2022")?.trim()?.takeIf { it.isNotEmpty() }
 
-    private fun contentRegion(root: UiNode, column: UiNode): Bounds {
+    private fun contentRegion(root: UiNode, column: UiNode, feedTab: UiNode): Bounds {
         val top = root.findById(TOP_BAR)?.bounds?.bottom ?: column.bounds.top
-        val bottom = root.findById(BOTTOM_BAR)?.bounds?.top ?: column.bounds.bottom
+        // LinkedIn collapses its top bar on scroll, and then the lazy column reports the
+        // whole screen — including the navigation. The feed tab is always on screen here,
+        // by the time this runs, so its top is a floor the column's own bounds are not.
+        val bottom = minOf(
+            root.findById(BOTTOM_BAR)?.bounds?.top ?: column.bounds.bottom,
+            feedTab.bounds.top,
+        )
         return Bounds(
             left = column.bounds.left,
             top = maxOf(column.bounds.top, top),

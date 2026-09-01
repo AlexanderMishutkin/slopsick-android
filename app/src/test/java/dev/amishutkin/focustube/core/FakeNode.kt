@@ -8,10 +8,16 @@ data class FakeNode(
     override val contentDesc: String? = null,
     override val bounds: Bounds = Bounds(0, 0, 1000, 1000),
     override val children: List<UiNode> = emptyList(),
+    override val selected: Boolean = false,
 ) : UiNode
 
-/** A LinkedIn-shaped screen: a lazy column holding one post with the given labels. */
-fun linkedInScreen(vararg labels: String, height: Int = 1000): UiNode =
+/**
+ * A LinkedIn-shaped screen: a lazy column holding one post with the given labels.
+ *
+ * The selected feed tab is part of the shape, not decoration — every LinkedIn tab is a
+ * lazy column, and without it this would be indistinguishable from Jobs.
+ */
+fun linkedInScreen(vararg labels: String, height: Int = 1000, onFeed: Boolean = true): UiNode =
     FakeNode(
         bounds = Bounds(0, 0, 1000, height),
         children = listOf(
@@ -25,8 +31,23 @@ fun linkedInScreen(vararg labels: String, height: Int = 1000): UiNode =
                     ),
                 ),
             ),
+            linkedInBottomBar(selectedTab = if (onFeed) "tab_feed" else "tab_jobs"),
         ),
     )
+
+/** LinkedIn's bottom navigation, with one tab marked current. */
+fun linkedInBottomBar(selectedTab: String): UiNode = FakeNode(
+    viewId = "com.linkedin.android:id/home_bottom_bar",
+    bounds = Bounds(0, 2211, 1080, 2337),
+    children = listOf("tab_feed", "tab_relationships", "tab_post", "tab_notifications", "tab_jobs")
+        .mapIndexed { index, tab ->
+            FakeNode(
+                viewId = "com.linkedin.android:id/" + tab,
+                bounds = Bounds(index * 216, 2211, (index + 1) * 216, 2337),
+                selected = tab == selectedTab,
+            )
+        },
+)
 
 /**
  * An Instagram-shaped screen showing the Reels player.
@@ -165,6 +186,18 @@ fun youtubeShortsPlayer(): UiNode = FakeNode(
             bounds = Bounds(0, 63, 1080, 2211),
         ),
         youtubeNavBar(),
+    ),
+)
+
+/**
+ * A Shorts shelf as YouTube actually builds it: the heading is one child of the feed and
+ * the videos are the next, each item describing itself as "... - play Short".
+ */
+fun youtubeShortsShelfRows(): List<List<String>> = listOf(
+    listOf("Shorts", "Action menu"),
+    listOf(
+        "Iron man engineering in real life, Engineering realities, 3 weeks ago - play Short",
+        "I made a Circle Plane, ProjectAir, 4 days ago - play Short",
     ),
 )
 

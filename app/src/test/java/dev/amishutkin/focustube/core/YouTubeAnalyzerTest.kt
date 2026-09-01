@@ -23,12 +23,31 @@ class YouTubeAnalyzerTest {
     }
 
     @Test
-    fun `a Shorts shelf in the home feed is covered`() {
+    fun `a Shorts shelf covers the videos, not just its heading`() {
+        // YouTube puts the heading in one child of the feed and the videos in the next.
+        // Covering the heading alone leaves the Shorts playing underneath a caption.
+        val (heading, videos) = youtubeShortsShelfRows()
         val scan = YouTubeAnalyzer.analyze(
-            youtubeHome(listOf("An ordinary video"), listOf("Shorts"), listOf("Another video")),
+            youtubeHome(listOf("An ordinary video"), heading, videos, listOf("Another video")),
         )
-        assertEquals(listOf(Bounds(0, 915, 1080, 1515)), OverlayPlan.cover(scan))
+        assertEquals(listOf(Bounds(0, 915, 1080, 2115)), OverlayPlan.cover(scan))
         assertEquals(Reason.SHORTS_SHELF, OverlayPlan.details(scan).single().reason)
+    }
+
+    @Test
+    fun `a shelf is one region even though it is several rows`() {
+        val (heading, videos) = youtubeShortsShelfRows()
+        val scan = YouTubeAnalyzer.analyze(youtubeHome(heading, videos))
+        assertEquals(1, scan.blackouts.size)
+    }
+
+    @Test
+    fun `two separate shelves stay separate`() {
+        val (heading, videos) = youtubeShortsShelfRows()
+        val scan = YouTubeAnalyzer.analyze(
+            youtubeHome(heading, videos, listOf("An ordinary video"), heading, videos),
+        )
+        assertEquals(2, scan.blackouts.size)
     }
 
     @Test

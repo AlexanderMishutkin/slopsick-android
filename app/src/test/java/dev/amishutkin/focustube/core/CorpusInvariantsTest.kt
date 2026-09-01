@@ -14,6 +14,7 @@ class CorpusInvariantsTest {
 
     private fun analyze(file: File): FeedScan {
         val root = XmlUiNode.load(file)
+        if (file.name.startsWith("chrome")) return ChromeAnalyzer.analyze(root)
         val linkedIn = LinkedInAnalyzer.analyze(root)
         return if (linkedIn.hasFeed) linkedIn else InstagramAnalyzer.analyze(root)
     }
@@ -111,7 +112,7 @@ class CorpusInvariantsTest {
 
     @Test
     fun `the wrong analyzer on the wrong app finds nothing rather than guessing`() {
-        for (file in XmlUiNode.fixtures()) {
+        for (file in XmlUiNode.fixtures().filterNot { it.name.startsWith("chrome") }) {
             val root = XmlUiNode.load(file)
             val ig = InstagramAnalyzer.analyze(root)
             val li = LinkedInAnalyzer.analyze(root)

@@ -1,6 +1,7 @@
 # FocusTube for Android
 
-Covers the posts you did not ask to see, in the Instagram, LinkedIn and YouTube apps.
+Covers the posts you did not ask to see — in the Instagram, LinkedIn and YouTube apps,
+and on instagram.com in Chrome.
 
 It is the same idea as the [browser extension](https://github.com/apmishutkin/FocusTube)
 — keep what you follow, lose what the feed picked for you — carried onto a phone,
@@ -79,12 +80,41 @@ positives.
 
 - **The Shorts tab is removed**, the same way as Instagram's Reels tab.
 - **The Shorts player is covered** if you reach it another way.
-- **Shorts shelves in the home feed are covered** — see the caveat below, because this is
-  the one rule here that has never been seen to fire.
+- **Shorts shelves in the home feed are covered**, videos included. A shelf is not one
+  row: YouTube puts the "Shorts" heading in one child of the feed and the videos in the
+  next, so matching the heading alone covers a caption and leaves the Shorts playing
+  underneath it. The run is stitched back together into one region.
+
+### Chrome
+
+instagram.com in the mobile browser. Chrome puts the whole page into the accessibility
+tree and its address bar alongside, so both "which site is this" and "what is on it" are
+answerable — but the page arrives as a deep pile of anonymous `View`s with no ids at all.
+A post is not a node; it is the stretch of page between one author's avatar and the next.
+
+Two consequences worth knowing:
+
+- **The covered region runs from the first avatar to the last post, and no further.** The
+  site's own header, the stories row and the bottom navigation are page content, not app
+  chrome — covering the viewport the way the native analyzers do would black out the
+  site's navigation and strand you.
+- **The site is remembered, not re-checked.** Chrome hides its toolbar the moment you
+  scroll, taking the address bar with it. Checking every frame means the filter switches
+  itself off as soon as you start reading.
+
+Every signal here is a word — Chrome exposes the page's accessible names, the same
+strings a screen reader announces, and those are translated with the site.
 
 ### LinkedIn
 
-LinkedIn is the bad case. Its feed is Jetpack Compose driven by server-defined UI and
+Only the feed tab. Every LinkedIn tab is the same lazy column from the tree's point of
+view, so keying off that alone covered job listings and search results too — neither of
+which is the feed choosing things for you. Which tab is current (`tab_feed`, selected) is
+the only thing that tells them apart, and if the tab bar is not on screen the answer is
+"not the feed": being unable to tell which screen this is, is not a licence to paint over
+it.
+
+LinkedIn is otherwise the bad case. Its feed is Jetpack Compose driven by server-defined UI and
 exposes **no view ids on post content** — only the scroll container, `sdui:lazyColumn`.
 Grouping is easier than Instagram (one child of the lazy column is one post) but every
 signal is a string: the connection degree (`• 1st`, `• 3rd+`), `Follow <name>`,
@@ -144,7 +174,7 @@ FocusTube feed filter.
 
 ## Tests
 
-67 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+78 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
 interface rather than `AccessibilityNodeInfo`, so they can be run against 46 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
@@ -194,19 +224,16 @@ Being specific, because the gaps matter more than the features:
   8 LinkedIn ones — the recon account was new and had no ad profile. The Instagram ad
   path is a string match written from the docs and has never matched anything real. It
   is the one word-match in `InstagramAnalyzer.kt`, and it is marked as such.
-- **The YouTube Shorts shelf rule has never fired.** No Shorts shelf appeared in roughly
-  twenty scrolls of the home feed on the development account. YouTube's feed rows carry
-  no view ids at all, so the rule matches a row whose heading is exactly "Shorts" —
-  narrow enough not to catch a video titled "I wore Shorts for 30 days", and untested
-  against a real shelf. The Shorts *tab* and *player* are both verified on device.
+- **The YouTube Shorts shelf rule is word-based.** YouTube's feed rows carry no view ids
+  at all, so a shelf is a row whose heading is exactly "Shorts", plus the rows under it
+  whose items describe themselves as "... - play Short". Narrow enough not to catch a
+  video titled "I wore Shorts for 30 days", but "play Short" is translated, so in another
+  language only the heading would be covered. Verified against a real shelf on device.
 - **A strip under the status bar can leak.** When an app draws its content edge to edge,
   the top ~60px sits under the transparent status bar, and the cover stops there because
   painting over the clock is worse.
-- **Chrome is not covered.** Chrome exposes its URL bar (`url_bar`) and the whole page
-  to the accessibility tree, so the mobile web feeds are reachable — but that needs
-  captures of the logged-in mobile web feed, which the recon account does not have.
-  Chrome is deliberately absent from `packageNames` until there is code that uses it:
-  listing a package is what grants the service sight of it.
+- **Chrome covers instagram.com only.** LinkedIn and YouTube on the mobile web are not
+  read.
 - **Only tested on an emulator** (Pixel-shaped AVD, Android 16). Fling behaviour on real
   hardware is different enough that acceptance belongs on a real phone.
 - **Only tested on one account's feed**, which follows about ten public accounts.

@@ -24,6 +24,7 @@ class FixtureReport {
             val root = XmlUiNode.load(file)
             val scan = when {
                 file.name.startsWith("ig") -> InstagramAnalyzer.analyze(root)
+                file.name.startsWith("chrome") -> ChromeAnalyzer.analyze(root)
                 file.name.startsWith("li") -> analyzeEither(root)
                 else -> continue
             }

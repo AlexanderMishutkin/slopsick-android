@@ -57,9 +57,34 @@ class LinkedInAnalyzerTest {
 
     @Test
     fun `a card with nothing on it at all is covered, not guessed at`() {
-        val item = scan("liscroll-08.xml").items.single()
+        val item = LinkedInAnalyzer.analyze(linkedInScreen("Show more")).items.single()
         assertEquals(Reason.NO_SIGNAL, item.reason)
         assertEquals(Verdict.UNKNOWN, item.verdict)
+    }
+
+    /**
+     * Every LinkedIn tab is a lazy column, so without checking which one is current this
+     * covered job listings and search results — neither of which is the feed choosing
+     * things for you.
+     */
+    @Test
+    fun `only the feed tab is touched`() {
+        val jobs = LinkedInAnalyzer.analyze(
+            linkedInScreen("Software Engineer", "Apply", onFeed = false),
+        )
+        assertTrue(!jobs.hasFeed && jobs.items.isEmpty())
+    }
+
+    @Test
+    fun `a screen with no tab bar at all is left alone`() {
+        // Not being able to tell which screen this is, is not a licence to paint over it.
+        val unknown = LinkedInAnalyzer.analyze(
+            FakeNode(
+                bounds = Bounds(0, 0, 1000, 1000),
+                children = listOf(FakeNode(viewId = "sdui:lazyColumn", bounds = Bounds(0, 0, 1000, 1000))),
+            ),
+        )
+        assertTrue(!unknown.hasFeed)
     }
 
     /**

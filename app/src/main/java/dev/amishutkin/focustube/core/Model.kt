@@ -4,11 +4,8 @@ package dev.amishutkin.focustube.core
 enum class TargetApp(val packageName: String) {
     INSTAGRAM("com.instagram.android"),
     LINKEDIN("com.linkedin.android"),
-    YOUTUBE("com.google.android.youtube");
-    // Chrome is missing on purpose. It exposes its URL bar and the whole page to the
-    // accessibility tree, so reading the mobile web feeds is possible — but nothing is
-    // written for it yet, and listing a package here is what grants this service sight
-    // of it. It goes in when there is code that uses it, not before. See the README.
+    YOUTUBE("com.google.android.youtube"),
+    CHROME("com.android.chrome");
 
     companion object {
         fun of(packageName: String?): TargetApp? =

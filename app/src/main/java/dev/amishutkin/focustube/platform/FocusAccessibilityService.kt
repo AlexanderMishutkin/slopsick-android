@@ -14,6 +14,7 @@ import dev.amishutkin.focustube.core.OverlayPlan
 import dev.amishutkin.focustube.core.Settings
 import dev.amishutkin.focustube.core.Surface
 import dev.amishutkin.focustube.core.TargetApp
+import dev.amishutkin.focustube.core.ChromeAnalyzer
 import dev.amishutkin.focustube.core.YouTubeAnalyzer
 
 /**
@@ -44,6 +45,9 @@ class FocusAccessibilityService : AccessibilityService() {
 
     /** When the feed last moved, so the labels can wait for it to stop. */
     private var lastScrollAt: Long = 0L
+
+    /** The site Chrome last showed in its address bar, while Chrome stays in front. */
+    private var chromeHost: String? = null
 
     private val refresh = Runnable { update() }
 
@@ -100,6 +104,7 @@ class FocusAccessibilityService : AccessibilityService() {
             // tells us anything about this one.
             ledger = FeedLedger()
             lastFeedBounds = null
+            chromeHost = null
             overlay.hide()
         }
 
@@ -148,6 +153,13 @@ class FocusAccessibilityService : AccessibilityService() {
             TargetApp.INSTAGRAM -> InstagramAnalyzer.analyze(root, settings)
             TargetApp.LINKEDIN -> LinkedInAnalyzer.analyze(root, settings)
             TargetApp.YOUTUBE -> YouTubeAnalyzer.analyze(root, settings)
+            TargetApp.CHROME -> {
+                // Chrome's address bar disappears on scroll, taking the only evidence of
+                // which site this is with it. Remember it for as long as Chrome is in
+                // front; leaving Chrome clears it, below.
+                ChromeAnalyzer.host(root)?.let { chromeHost = it }
+                ChromeAnalyzer.analyze(root, settings, ChromeAnalyzer.isInstagram(chromeHost))
+            }
         }
 
         if (scan.isEmpty) {
@@ -200,6 +212,7 @@ class FocusAccessibilityService : AccessibilityService() {
         currentApp = null
         lastFeedBounds = null
         lastBlockers = emptyList()
+        chromeHost = null
         if (::overlay.isInitialized) overlay.hide()
     }
 
