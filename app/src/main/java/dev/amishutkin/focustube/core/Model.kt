@@ -15,6 +15,18 @@ enum class TargetApp(val packageName: String) {
     }
 }
 
+/** Which screen of the app is showing. */
+enum class Surface {
+    /** The main feed, with posts to judge one by one. */
+    FEED,
+
+    /** Instagram's Reels player: nothing here was chosen, so none of it is judged. */
+    REELS,
+
+    /** A profile, a chat, settings — nothing this app has an opinion about. */
+    OTHER,
+}
+
 enum class Verdict {
     /** Something you chose to see: an account you follow, a person you are connected to. */
     KEEP,
@@ -44,6 +56,7 @@ enum class Reason {
     STORIES_TRAY,
     OFF_SCREEN_HEADER,
     NO_SIGNAL,
+    REELS,
 }
 
 data class FeedItem(
@@ -72,11 +85,27 @@ data class FeedScan(
     val app: TargetApp,
     val feedBounds: Bounds?,
     val items: List<FeedItem>,
+    val surface: Surface = Surface.FEED,
+    /**
+     * Covered outright, whatever the feed says — the Reels player, which is not a list
+     * of things you chose and so has nothing to judge post by post.
+     */
+    val blackout: Bounds? = null,
+    /**
+     * Covered *and* made untappable. Painting over the Reels tab would only hide it: the
+     * main overlay lets touches through so that scrolling still works, so a blind tap
+     * would still open Reels. These regions get a small window of their own that
+     * swallows the touch.
+     */
+    val blockers: List<Bounds> = emptyList(),
 ) {
     val hasFeed: Boolean get() = feedBounds != null && !feedBounds.isEmpty
 
+    val isEmpty: Boolean
+        get() = !hasFeed && blackout == null && blockers.isEmpty()
+
     companion object {
-        fun none(app: TargetApp) = FeedScan(app, null, emptyList())
+        fun none(app: TargetApp) = FeedScan(app, null, emptyList(), Surface.OTHER)
     }
 }
 
@@ -93,6 +122,12 @@ data class Settings(
     val hideNetworkActivity: Boolean = false,
     /** Hide the stories row at the top of Instagram's feed. */
     val hideStoriesTray: Boolean = false,
+    /**
+     * Instagram only. Covers the Reels player and makes the Reels tab untappable —
+     * Instagram opens straight into Reels often enough that hiding the button alone
+     * would not be enough.
+     */
+    val hideReels: Boolean = true,
     /** Hide the interstitial cards LinkedIn injects ("People you may know", job prompts). */
     val hideFeedModules: Boolean = true,
 )

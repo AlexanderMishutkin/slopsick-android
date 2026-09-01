@@ -19,7 +19,12 @@ object OverlayPlan {
     /** Vertical slivers thinner than this are not worth painting. */
     private const val MIN_BAND = 2
 
+    /** Regions to paint over. They do not intercept touches. */
     fun cover(scan: FeedScan): List<Bounds> {
+        scan.blackout?.let { blackout ->
+            // Reels is not a feed of things you chose; there is nothing to cut a hole for.
+            return if (blackout.isEmpty) emptyList() else listOf(blackout)
+        }
         val feed = scan.feedBounds ?: return emptyList()
         if (feed.isEmpty) return emptyList()
 
@@ -38,6 +43,9 @@ object OverlayPlan {
         if (feed.bottom - y >= MIN_BAND) bands += Bounds(feed.left, y, feed.right, feed.bottom)
         return bands
     }
+
+    /** Regions to paint over *and* keep from being tapped. */
+    fun block(scan: FeedScan): List<Bounds> = scan.blockers.filterNot { it.isEmpty }
 
     private fun merge(ranges: List<Pair<Int, Int>>): List<Pair<Int, Int>> {
         if (ranges.isEmpty()) return emptyList()

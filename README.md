@@ -36,6 +36,26 @@ holds the audio track, "Edited · 7d", "Translate with AI" **or** "Suggested for
 depending on the post. Seven of the test fixtures are suggested posts whose label says
 something else; reading the label would pass every other test and miss all seven.
 
+### Reels
+
+Reels is not a feed of things you chose, so there is nothing in it to judge post by
+post. It is dealt with in two places:
+
+- **The tab button is removed.** Painting over it is not enough — the main overlay lets
+  touches through so that scrolling still works, so a button you cannot see would still
+  open Reels when tapped blind. The button gets a small window of its own, exactly its
+  size, that takes the touch and swallows it.
+- **The player is covered whole**, if you reach it another way. Instagram opens straight
+  into Reels by itself often enough that handling only the button would miss the case
+  that matters. The tab bar is left uncovered so you can leave.
+
+Covers are painted the colour the app uses behind the thing being covered, so they read
+as "nothing here" rather than as a hole. The feeds follow the system light/dark setting;
+Reels does not, because Reels is dark on a light phone too. Instagram's tab bar is
+`#0C1014` where its Reels player is pure black, so a blocked button is painted with the
+bar's colour and not the surface's — otherwise there is a visible rectangle exactly
+where the thing you are trying to forget used to be.
+
 ### LinkedIn
 
 LinkedIn is the bad case. Its feed is Jetpack Compose driven by server-defined UI and
@@ -98,7 +118,7 @@ FocusTube feed filter.
 
 ## Tests
 
-48 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+55 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
 interface rather than `AccessibilityNodeInfo`, so they can be run against 46 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
@@ -109,6 +129,19 @@ capture more:
 
 ```
 python3 tools/anonymize.py <dir-of-dumps> app/src/test/resources/fixtures
+```
+
+Some rules cannot be expressed by a captured screen — `uiautomator dump` cannot read
+Reels at all, because it waits for a window that stops changing and an autoplaying video
+never does. Those screens are built by hand in `FakeNode.kt` from ids and bounds logged
+off a real device.
+
+If you need to see the ids on a screen `uiautomator` cannot read, a debug build can print
+them (**view ids and geometry only, never text**):
+
+```
+adb shell setprop log.tag.FocusTubeTree VERBOSE
+adb logcat -s FocusTubeTree
 ```
 
 The most useful tests are the corpus invariants, which hold over all 46 screens rather
@@ -135,6 +168,10 @@ Being specific, because the gaps matter more than the features:
   tools, and this is not one. Distribution is a signed APK, installed by hand.
 - The watchdog and overlay are not unit tested — they need a device. Both were found
   broken on one and fixed there.
+- The Reels cover is a plain sheet of colour with nothing written on it. It is not
+  obvious to a first-time user that the app is doing this rather than Instagram breaking.
+- Cover colours follow the *system* theme, not the app's own. Both apps follow the
+  system by default, so this is right until someone sets a per-app theme.
 
 ## Layout
 

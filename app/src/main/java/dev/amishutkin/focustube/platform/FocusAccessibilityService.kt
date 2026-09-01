@@ -11,6 +11,7 @@ import dev.amishutkin.focustube.core.InstagramAnalyzer
 import dev.amishutkin.focustube.core.LinkedInAnalyzer
 import dev.amishutkin.focustube.core.OverlayPlan
 import dev.amishutkin.focustube.core.Settings
+import dev.amishutkin.focustube.core.Surface
 import dev.amishutkin.focustube.core.TargetApp
 
 /**
@@ -34,6 +35,10 @@ class FocusAccessibilityService : AccessibilityService() {
 
     /** The feed region from the last successful scan, used to cover instantly on scroll. */
     private var lastFeedBounds: Bounds? = null
+
+    /** Kept across the scroll fail-safe so the blocker windows are not torn down and
+     *  rebuilt on every scroll event. */
+    private var lastBlockers: List<Bounds> = emptyList()
 
     private val refresh = Runnable { update() }
 
@@ -96,7 +101,7 @@ class FocusAccessibilityService : AccessibilityService() {
         // Scrolling invalidates every hole at once: the post that earned one has moved,
         // and until the next scan says otherwise the honest thing to show is a cover.
         if (event?.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            lastFeedBounds?.let { overlay.show(listOf(it)) }
+            lastFeedBounds?.let { overlay.show(app, Surface.FEED, listOf(it), lastBlockers) }
         }
 
         handler.removeCallbacks(refresh)
@@ -120,6 +125,7 @@ class FocusAccessibilityService : AccessibilityService() {
         }
         val root = SnapshotNode.of(live)
         live?.recycleCompat()
+        if (root != null) TreeDebug.dump(root)
         if (root == null) {
             // The window can be momentarily unreadable — mid-transition, or while the app
             // is busy. Leaving it here would strand whatever is on screen under the last
@@ -135,25 +141,31 @@ class FocusAccessibilityService : AccessibilityService() {
             TargetApp.LINKEDIN -> LinkedInAnalyzer.analyze(root, settings)
         }
 
-        if (!scan.hasFeed) {
-            // Not on a feed screen — a profile, a chat, settings. Nothing to cover.
+        if (scan.isEmpty) {
+            // Not a screen this app has an opinion about — a profile, a chat, settings.
             lastFeedBounds = null
+            lastBlockers = emptyList()
             overlay.hide()
             armWatchdog(false)
             return
         }
 
-        val tracked = ledger.observe(scan)
+        // Reels has no posts to weigh, so there is nothing for the ledger to remember and
+        // running it would only leave stale verdicts behind for the feed.
+        val tracked = if (scan.surface == Surface.FEED) ledger.observe(scan) else scan
         lastFeedBounds = tracked.feedBounds
         val bands = OverlayPlan.cover(tracked)
+        val blockers = OverlayPlan.block(tracked)
         if (dev.amishutkin.focustube.BuildConfig.DEBUG) {
             android.util.Log.d(
                 "FocusTube",
-                "$app feed=${tracked.feedBounds} items=${tracked.items.size} bands=${bands.size}",
+                "$app ${tracked.surface} feed=${tracked.feedBounds} " +
+                    "items=${tracked.items.size} bands=${bands.size} blockers=${blockers.size}",
             )
         }
-        overlay.show(bands)
-        armWatchdog(bands.isNotEmpty())
+        lastBlockers = blockers
+        overlay.show(app, tracked.surface, bands, blockers)
+        armWatchdog(bands.isNotEmpty() || blockers.isNotEmpty())
     }
 
     private fun armWatchdog(active: Boolean) {
@@ -168,6 +180,7 @@ class FocusAccessibilityService : AccessibilityService() {
         misses = 0
         currentApp = null
         lastFeedBounds = null
+        lastBlockers = emptyList()
         if (::overlay.isInitialized) overlay.hide()
     }
 

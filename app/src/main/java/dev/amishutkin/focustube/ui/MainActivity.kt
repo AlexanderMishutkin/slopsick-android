@@ -25,6 +25,7 @@ class MainActivity : Activity() {
     private lateinit var activity: Switch
     private lateinit var modules: Switch
     private lateinit var stories: Switch
+    private lateinit var reels: Switch
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +39,7 @@ class MainActivity : Activity() {
         activity = findViewById(R.id.optActivity)
         modules = findViewById(R.id.optModules)
         stories = findViewById(R.id.optStories)
+        reels = findViewById(R.id.optReels)
 
         findViewById<Button>(R.id.openSettings).setOnClickListener {
             startActivity(
@@ -52,9 +54,10 @@ class MainActivity : Activity() {
         activity.isChecked = current.hideNetworkActivity
         modules.isChecked = current.hideFeedModules
         stories.isChecked = current.hideStoriesTray
+        reels.isChecked = current.hideReels
 
         val onToggle = CompoundButton.OnCheckedChangeListener { _, _ -> persist() }
-        for (toggle in listOf(suggested, promoted, activity, modules, stories)) {
+        for (toggle in listOf(suggested, promoted, activity, modules, stories, reels)) {
             toggle.setOnCheckedChangeListener(onToggle)
         }
     }
@@ -73,6 +76,7 @@ class MainActivity : Activity() {
                 hidePromoted = promoted.isChecked,
                 hideNetworkActivity = activity.isChecked,
                 hideStoriesTray = stories.isChecked,
+                hideReels = reels.isChecked,
                 hideFeedModules = modules.isChecked,
             ),
         )

@@ -25,6 +25,13 @@ object InstagramAnalyzer {
     private const val STORIES_TRAY = "reels_tray_container"
     private const val ACTION_BAR = "main_feed_action_bar"
     private const val TAB_BAR = "tab_bar"
+    private const val REELS_TAB = "clips_tab"
+
+    /**
+     * The Reels player. Several ids identify it; this one wraps the whole surface and has
+     * been stable across the captures taken so far.
+     */
+    private const val REELS_VIEWER = "clips_viewer_container"
 
     /**
      * Instagram has never shown an ad in any capture taken so far, so this string is the
@@ -34,9 +41,35 @@ object InstagramAnalyzer {
     private val SPONSORED_LABELS = listOf("Sponsored", "Paid partnership")
 
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
-        val list = findFeedList(root) ?: return FeedScan.none(TargetApp.INSTAGRAM)
+        // The Reels tab is dealt with on every Instagram screen, not just the feed:
+        // Instagram opens straight into Reels often enough that only covering the button
+        // when a feed happens to be on screen would miss the case that matters.
+        val blockers = if (settings.hideReels) {
+            listOfNotNull(root.findById(REELS_TAB)?.bounds?.takeIf { !it.isEmpty })
+        } else {
+            emptyList()
+        }
+
+        if (settings.hideReels) {
+            val reels = root.findById(REELS_VIEWER)?.bounds
+            if (reels != null && !reels.isEmpty) {
+                return FeedScan(
+                    app = TargetApp.INSTAGRAM,
+                    feedBounds = null,
+                    items = listOf(FeedItem(reels, Verdict.HIDE, Reason.REELS)),
+                    surface = Surface.REELS,
+                    blackout = reels,
+                    blockers = blockers,
+                )
+            }
+        }
+
+        val list = findFeedList(root)
+            ?: return FeedScan.none(TargetApp.INSTAGRAM).copy(blockers = blockers)
         val content = contentRegion(root, list)
-        if (content.isEmpty) return FeedScan.none(TargetApp.INSTAGRAM)
+        if (content.isEmpty) {
+            return FeedScan.none(TargetApp.INSTAGRAM).copy(blockers = blockers)
+        }
 
         val children = list.children
         val headerAt = children.indices.filter { children[it].containsId(HEADER) }
@@ -78,6 +111,8 @@ object InstagramAnalyzer {
             app = TargetApp.INSTAGRAM,
             feedBounds = content,
             items = items.mapNotNull { it.clipTo(content) },
+            surface = Surface.FEED,
+            blockers = blockers,
         )
     }
 

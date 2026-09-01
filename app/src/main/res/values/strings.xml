@@ -16,6 +16,8 @@
     <string name="opt_activity">LinkedIn: posts your network only reacted to</string>
     <string name="opt_activity_sub">Off, you still see what your connections liked or commented on.</string>
     <string name="opt_stories">Instagram: the stories row</string>
+    <string name="opt_reels">Instagram: Reels</string>
+    <string name="opt_reels_sub">Covers the Reels player and makes the Reels tab untappable.</string>
     <string name="opt_modules">LinkedIn: \"People you may know\" and similar cards</string>
 
     <string name="section_privacy">Privacy</string>
