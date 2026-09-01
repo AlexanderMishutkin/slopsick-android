@@ -3,7 +3,7 @@
     <string name="app_name">FocusTube</string>
     <string name="service_label">FocusTube feed filter</string>
     <string name="service_summary">Covers feed posts from accounts you don\'t follow</string>
-    <string name="service_description">Reads the feed on screen in Instagram, LinkedIn and Chrome so it can cover posts you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
+    <string name="service_description">Reads the feed on screen in Instagram and LinkedIn so it can cover posts you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
 
     <string name="status_on">Filtering is on</string>
     <string name="status_off">Filtering is off</string>
@@ -19,5 +19,5 @@
     <string name="opt_modules">LinkedIn: \"People you may know\" and similar cards</string>
 
     <string name="section_privacy">Privacy</string>
-    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram, LinkedIn and Chrome — the system enforces that list. Nothing is stored except the switches above.</string>
+    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram and LinkedIn — the system enforces that list. Nothing is stored except the switches above.</string>
 </resources>
