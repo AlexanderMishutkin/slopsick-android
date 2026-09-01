@@ -7,6 +7,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.RectF
+import android.util.TypedValue
 import android.os.Build
 import android.util.Log
 import android.view.Gravity
@@ -15,7 +17,10 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import dev.amishutkin.focustube.core.Bounds
+import dev.amishutkin.focustube.core.FeedItem
+import dev.amishutkin.focustube.core.Reason
 import dev.amishutkin.focustube.core.Surface
+import dev.amishutkin.focustube.R
 import dev.amishutkin.focustube.core.TargetApp
 
 /**
@@ -62,6 +67,8 @@ class OverlayController(private val context: Context) {
          * exactly where the thing you are trying to forget used to be.
          */
         const val INSTAGRAM_BAR_DARK = 0xFF0C1014.toInt()
+        const val YOUTUBE_DARK = 0xFF0F0F0F.toInt()
+        const val YOUTUBE_LIGHT = 0xFFFFFFFF.toInt()
     }
 
     private val windows = context.getSystemService(WindowManager::class.java)
@@ -72,9 +79,10 @@ class OverlayController(private val context: Context) {
         app: TargetApp?,
         surface: Surface,
         covers: List<Bounds>,
+        details: List<FeedItem>,
         blockers: List<Bounds>,
     ) {
-        showCovers(colorFor(app, surface), covers)
+        showCovers(colorFor(app, surface), covers, details)
         showBlockers(blockers, barColorFor(app, surface))
     }
 
@@ -85,7 +93,7 @@ class OverlayController(private val context: Context) {
         blockerViews.clear()
     }
 
-    private fun showCovers(color: Int, covers: List<Bounds>) {
+    private fun showCovers(color: Int, covers: List<Bounds>, details: List<FeedItem>) {
         if (covers.isEmpty()) {
             view?.let { runCatching { windows.removeView(it) } }
             view = null
@@ -100,7 +108,7 @@ class OverlayController(private val context: Context) {
             view = it
         }
         target.setFill(color)
-        target.setBands(covers)
+        target.setBands(covers, details)
     }
 
     private fun showBlockers(blockers: List<Bounds>, color: Int) {
@@ -119,10 +127,17 @@ class OverlayController(private val context: Context) {
         }
     }
 
-    /** The colour of the bar a blocked control sits on, which is not the surface colour. */
-    private fun barColorFor(app: TargetApp?, surface: Surface): Int {
-        if (app != TargetApp.INSTAGRAM) return colorFor(app, surface)
-        return if (surface == Surface.REELS || isNight()) INSTAGRAM_BAR_DARK else INSTAGRAM_LIGHT
+    /**
+     * The colour of the bar a blocked control sits on, which is not the surface colour.
+     * Both apps use a lighter black for the navigation bar than for the video behind it,
+     * and a black rectangle on a #0F0F0F bar is perfectly visible.
+     */
+    private fun barColorFor(app: TargetApp?, surface: Surface): Int = when (app) {
+        TargetApp.INSTAGRAM ->
+            if (surface == Surface.REELS || isNight()) INSTAGRAM_BAR_DARK else INSTAGRAM_LIGHT
+        TargetApp.YOUTUBE ->
+            if (surface == Surface.REELS || isNight()) YOUTUBE_DARK else YOUTUBE_LIGHT
+        else -> colorFor(app, surface)
     }
 
     private fun isNight(): Boolean =
@@ -137,6 +152,7 @@ class OverlayController(private val context: Context) {
         val night = isNight()
         return when (app) {
             TargetApp.LINKEDIN -> if (night) LINKEDIN_DARK else LINKEDIN_LIGHT
+            TargetApp.YOUTUBE -> if (night) YOUTUBE_DARK else YOUTUBE_LIGHT
             else -> if (night) INSTAGRAM_DARK else INSTAGRAM_LIGHT
         }
     }
@@ -174,19 +190,47 @@ class OverlayController(private val context: Context) {
     private class CoverView(context: Context) : View(context) {
 
         private var bands: List<Bounds> = emptyList()
-        private val fill = Paint().apply { isAntiAlias = false }
+        private var details: List<FeedItem> = emptyList()
 
-        fun setBands(next: List<Bounds>) {
-            if (next == bands) return
+        private val fill = Paint().apply { isAntiAlias = false }
+        private val outline = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = dp(1.5f)
+        }
+        private val caption = Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            textSize = dp(13f)
+        }
+
+        fun setBands(next: List<Bounds>, nextDetails: List<FeedItem>) {
+            if (next == bands && nextDetails == details) return
             bands = next
+            details = nextDetails
             invalidate()
         }
 
         fun setFill(color: Int) {
             if (fill.color == color) return
             fill.color = color
+            // Both marks have to read against whatever the cover is painted with.
+            val light = isLight(color)
+            outline.color = if (light) 0xFFDDDDDD.toInt() else 0xFF2E2E2E.toInt()
+            caption.color = if (light) 0xFF9A9A9A.toInt() else 0xFF6E6E6E.toInt()
             invalidate()
         }
+
+        private fun isLight(color: Int): Boolean {
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+            return (r * 299 + g * 587 + b * 114) / 1000 > 128
+        }
+
+        private fun dp(value: Float) = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics,
+        )
 
         override fun onDraw(canvas: Canvas) {
             if (DEBUG) {
@@ -205,6 +249,42 @@ class OverlayController(private val context: Context) {
                 if (bottom - top < 1f) continue
                 canvas.drawRect(band.left.toFloat(), top, band.right.toFloat(), bottom, fill)
             }
+
+            // Outlines go on once the screen has settled. During a scroll the bounds are a
+            // frame or two out of date, and an outline that lags is worse than none — the
+            // flat cover reads as "still working" and nobody notices a missing border.
+            for (item in details) {
+                val top = maxOf(item.bounds.top, topInset).toFloat()
+                val bottom = minOf(item.bounds.bottom.toFloat(), floor)
+                if (bottom - top < dp(48f)) continue
+
+                val inset = dp(6f)
+                val rect = RectF(
+                    item.bounds.left + inset,
+                    top + inset,
+                    item.bounds.right - inset,
+                    bottom - inset,
+                )
+                val radius = dp(10f)
+                canvas.drawRoundRect(rect, radius, radius, outline)
+                canvas.drawText(
+                    context.getString(labelFor(item.reason)),
+                    rect.centerX(),
+                    rect.centerY() + caption.textSize / 3f,
+                    caption,
+                )
+            }
+        }
+
+        private fun labelFor(reason: Reason) = when (reason) {
+            Reason.SUGGESTED -> R.string.hidden_suggested
+            Reason.PROMOTED -> R.string.hidden_promoted
+            Reason.FEED_MODULE -> R.string.hidden_module
+            Reason.NETWORK_ACTIVITY -> R.string.hidden_activity
+            Reason.REELS -> R.string.hidden_reels
+            Reason.EXPLORE -> R.string.hidden_explore
+            Reason.SHORTS_SHELF -> R.string.hidden_shorts
+            else -> R.string.hidden_generic
         }
 
         /**

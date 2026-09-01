@@ -1,6 +1,6 @@
 # FocusTube for Android
 
-Covers the posts you did not ask to see, in the Instagram and LinkedIn apps.
+Covers the posts you did not ask to see, in the Instagram, LinkedIn and YouTube apps.
 
 It is the same idea as the [browser extension](https://github.com/apmishutkin/FocusTube)
 — keep what you follow, lose what the feed picked for you — carried onto a phone,
@@ -51,10 +51,36 @@ post. It is dealt with in two places:
 
 Covers are painted the colour the app uses behind the thing being covered, so they read
 as "nothing here" rather than as a hole. The feeds follow the system light/dark setting;
-Reels does not, because Reels is dark on a light phone too. Instagram's tab bar is
-`#0C1014` where its Reels player is pure black, so a blocked button is painted with the
-bar's colour and not the surface's — otherwise there is a visible rectangle exactly
-where the thing you are trying to forget used to be.
+Reels and Shorts do not, because they are dark on a light phone too. Both apps also use a
+lighter black for the navigation bar than for the video behind it — Instagram's bar is
+`#0C1014`, YouTube's `#0F0F0F` — so a blocked button takes the bar's colour and not the
+surface's. Otherwise there is a visible rectangle exactly where the thing you are trying
+to forget used to be.
+
+Once the screen stops moving, each covered thing gets an outline and a label — "Suggested
+post hidden", "Ad hidden", "Explore hidden". During a scroll the cover is a flat sheet:
+the bounds are already a frame or two out of date, and an outline that lags is more
+distracting than none.
+
+### Explore
+
+Instagram's Explore tab is a grid of things the algorithm picked, so all of it goes. The
+search bar stays — searching for something is a thing you chose to do — and so does the
+tab bar.
+
+Once you type, Instagram drops the `explore_action_bar`, and that absence is what tells
+the two apart. Keying off the grid alone would cover the results you went looking for,
+which is the opposite of helping.
+
+### YouTube
+
+Only Shorts. The home feed is left alone; its ads were explicitly not worth the false
+positives.
+
+- **The Shorts tab is removed**, the same way as Instagram's Reels tab.
+- **The Shorts player is covered** if you reach it another way.
+- **Shorts shelves in the home feed are covered** — see the caveat below, because this is
+  the one rule here that has never been seen to fire.
 
 ### LinkedIn
 
@@ -118,7 +144,7 @@ FocusTube feed filter.
 
 ## Tests
 
-55 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+67 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
 interface rather than `AccessibilityNodeInfo`, so they can be run against 46 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
@@ -144,6 +170,18 @@ adb shell setprop log.tag.FocusTubeTree VERBOSE
 adb logcat -s FocusTubeTree
 ```
 
+After `adb install -r`, the accessibility framework keeps the old, now-dead service bound
+and silently delivers it nothing. Force-stop the app and toggle the service off and on,
+or you will spend a while debugging code that is not running:
+
+```
+adb shell am force-stop dev.amishutkin.focustube
+adb shell settings put secure enabled_accessibility_services ''
+adb shell settings put secure accessibility_enabled 0
+adb shell settings put secure enabled_accessibility_services dev.amishutkin.focustube/dev.amishutkin.focustube.platform.FocusAccessibilityService
+adb shell settings put secure accessibility_enabled 1
+```
+
 The most useful tests are the corpus invariants, which hold over all 46 screens rather
 than expectations about one of them — in particular that **everything not explicitly
 kept ends up covered**.
@@ -156,6 +194,14 @@ Being specific, because the gaps matter more than the features:
   8 LinkedIn ones — the recon account was new and had no ad profile. The Instagram ad
   path is a string match written from the docs and has never matched anything real. It
   is the one word-match in `InstagramAnalyzer.kt`, and it is marked as such.
+- **The YouTube Shorts shelf rule has never fired.** No Shorts shelf appeared in roughly
+  twenty scrolls of the home feed on the development account. YouTube's feed rows carry
+  no view ids at all, so the rule matches a row whose heading is exactly "Shorts" —
+  narrow enough not to catch a video titled "I wore Shorts for 30 days", and untested
+  against a real shelf. The Shorts *tab* and *player* are both verified on device.
+- **A strip under the status bar can leak.** When an app draws its content edge to edge,
+  the top ~60px sits under the transparent status bar, and the cover stops there because
+  painting over the clock is worse.
 - **Chrome is not covered.** Chrome exposes its URL bar (`url_bar`) and the whole page
   to the accessibility tree, so the mobile web feeds are reachable — but that needs
   captures of the logged-in mobile web feed, which the recon account does not have.

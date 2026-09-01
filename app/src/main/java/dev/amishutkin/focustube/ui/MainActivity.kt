@@ -26,6 +26,8 @@ class MainActivity : Activity() {
     private lateinit var modules: Switch
     private lateinit var stories: Switch
     private lateinit var reels: Switch
+    private lateinit var explore: Switch
+    private lateinit var shorts: Switch
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,6 +42,8 @@ class MainActivity : Activity() {
         modules = findViewById(R.id.optModules)
         stories = findViewById(R.id.optStories)
         reels = findViewById(R.id.optReels)
+        explore = findViewById(R.id.optExplore)
+        shorts = findViewById(R.id.optShorts)
 
         findViewById<Button>(R.id.openSettings).setOnClickListener {
             startActivity(
@@ -55,9 +59,11 @@ class MainActivity : Activity() {
         modules.isChecked = current.hideFeedModules
         stories.isChecked = current.hideStoriesTray
         reels.isChecked = current.hideReels
+        explore.isChecked = current.hideExplore
+        shorts.isChecked = current.hideShorts
 
         val onToggle = CompoundButton.OnCheckedChangeListener { _, _ -> persist() }
-        for (toggle in listOf(suggested, promoted, activity, modules, stories, reels)) {
+        for (toggle in listOf(suggested, promoted, activity, modules, stories, reels, explore, shorts)) {
             toggle.setOnCheckedChangeListener(onToggle)
         }
     }
@@ -77,6 +83,8 @@ class MainActivity : Activity() {
                 hideNetworkActivity = activity.isChecked,
                 hideStoriesTray = stories.isChecked,
                 hideReels = reels.isChecked,
+                hideShorts = shorts.isChecked,
+                hideExplore = explore.isChecked,
                 hideFeedModules = modules.isChecked,
             ),
         )

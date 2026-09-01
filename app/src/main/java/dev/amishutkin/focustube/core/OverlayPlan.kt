@@ -19,12 +19,18 @@ object OverlayPlan {
     /** Vertical slivers thinner than this are not worth painting. */
     private const val MIN_BAND = 2
 
+    /** Below this a rectangle cannot hold a readable label, so it does not get one. */
+    private const val MIN_LABEL_HEIGHT = 140
+
     /** Regions to paint over. They do not intercept touches. */
-    fun cover(scan: FeedScan): List<Bounds> {
-        scan.blackout?.let { blackout ->
-            // Reels is not a feed of things you chose; there is nothing to cut a hole for.
-            return if (blackout.isEmpty) emptyList() else listOf(blackout)
-        }
+    fun cover(scan: FeedScan): List<Bounds> =
+        scan.blackouts.filterNot { it.isEmpty } + feedBands(scan)
+
+    /**
+     * The feed, minus the posts that earned a hole. A blackout region is not a feed of
+     * things you chose, so it never gets one.
+     */
+    private fun feedBands(scan: FeedScan): List<Bounds> {
         val feed = scan.feedBounds ?: return emptyList()
         if (feed.isEmpty) return emptyList()
 
@@ -42,6 +48,21 @@ object OverlayPlan {
         }
         if (feed.bottom - y >= MIN_BAND) bands += Bounds(feed.left, y, feed.right, feed.bottom)
         return bands
+    }
+
+    /**
+     * The individual things being covered, for drawing an outline and a label on each
+     * once the screen has settled. Merged bands are the right shape for painting and the
+     * wrong shape for explaining: two hidden posts in a row are one band but two things.
+     *
+     * Anything too short to hold a line of text is left out — a sliver of a post at the
+     * edge of the screen does not need a caption.
+     */
+    fun details(scan: FeedScan): List<FeedItem> {
+        val labelled = scan.items.filter { it.isHidden && it.bounds.height >= MIN_LABEL_HEIGHT }
+        return scan.blackouts.filterNot { it.isEmpty }.mapNotNull { blackout ->
+            labelled.firstOrNull { it.bounds == blackout }
+        }.ifEmpty { labelled }
     }
 
     /** Regions to paint over *and* keep from being tapped. */

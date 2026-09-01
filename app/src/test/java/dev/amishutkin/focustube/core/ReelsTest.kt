@@ -1,7 +1,6 @@
 package dev.amishutkin.focustube.core
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,7 +10,7 @@ class ReelsTest {
     fun `the Reels player is covered whole, not judged post by post`() {
         val scan = InstagramAnalyzer.analyze(instagramReelsScreen())
         assertEquals(Surface.REELS, scan.surface)
-        assertEquals(Bounds(0, 63, 1080, 2211), scan.blackout)
+        assertEquals(listOf(Bounds(0, 63, 1080, 2211)), scan.blackouts)
         assertEquals(listOf(Bounds(0, 63, 1080, 2211)), OverlayPlan.cover(scan))
     }
 
@@ -57,7 +56,7 @@ class ReelsTest {
         val off = Settings(hideReels = false)
 
         val reels = InstagramAnalyzer.analyze(instagramReelsScreen(), off)
-        assertNull(reels.blackout)
+        assertTrue(reels.blackouts.isEmpty())
         assertTrue(reels.blockers.isEmpty())
         assertTrue(OverlayPlan.cover(reels).isEmpty())
 

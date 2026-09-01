@@ -3,7 +3,8 @@ package dev.amishutkin.focustube.core
 /** An app whose feed this tool knows how to read. */
 enum class TargetApp(val packageName: String) {
     INSTAGRAM("com.instagram.android"),
-    LINKEDIN("com.linkedin.android");
+    LINKEDIN("com.linkedin.android"),
+    YOUTUBE("com.google.android.youtube");
     // Chrome is missing on purpose. It exposes its URL bar and the whole page to the
     // accessibility tree, so reading the mobile web feeds is possible — but nothing is
     // written for it yet, and listing a package here is what grants this service sight
@@ -20,8 +21,17 @@ enum class Surface {
     /** The main feed, with posts to judge one by one. */
     FEED,
 
-    /** Instagram's Reels player: nothing here was chosen, so none of it is judged. */
+    /**
+     * A wall of short video — Instagram's Reels player, YouTube's Shorts player.
+     * Nothing here was chosen, so none of it is judged.
+     */
     REELS,
+
+    /**
+     * A grid of things the algorithm picked: Instagram's Explore tab. Same idea as
+     * REELS — there is nothing in it you asked for.
+     */
+    EXPLORE,
 
     /** A profile, a chat, settings — nothing this app has an opinion about. */
     OTHER,
@@ -57,6 +67,8 @@ enum class Reason {
     OFF_SCREEN_HEADER,
     NO_SIGNAL,
     REELS,
+    EXPLORE,
+    SHORTS_SHELF,
 }
 
 data class FeedItem(
@@ -87,10 +99,11 @@ data class FeedScan(
     val items: List<FeedItem>,
     val surface: Surface = Surface.FEED,
     /**
-     * Covered outright, whatever the feed says — the Reels player, which is not a list
-     * of things you chose and so has nothing to judge post by post.
+     * Covered outright, whatever the feed says — a Reels or Shorts player, Instagram's
+     * Explore grid, a Shorts shelf wedged into YouTube's home feed. None of these is a
+     * list of things you chose, so there is nothing in them to judge one by one.
      */
-    val blackout: Bounds? = null,
+    val blackouts: List<Bounds> = emptyList(),
     /**
      * Covered *and* made untappable. Painting over the Reels tab would only hide it: the
      * main overlay lets touches through so that scrolling still works, so a blind tap
@@ -102,7 +115,7 @@ data class FeedScan(
     val hasFeed: Boolean get() = feedBounds != null && !feedBounds.isEmpty
 
     val isEmpty: Boolean
-        get() = !hasFeed && blackout == null && blockers.isEmpty()
+        get() = !hasFeed && blackouts.isEmpty() && blockers.isEmpty()
 
     companion object {
         fun none(app: TargetApp) = FeedScan(app, null, emptyList(), Surface.OTHER)
@@ -128,6 +141,13 @@ data class Settings(
      * would not be enough.
      */
     val hideReels: Boolean = true,
+    /** YouTube only. Covers the Shorts player and makes the Shorts tab untappable. */
+    val hideShorts: Boolean = true,
+    /**
+     * Instagram only. Covers the Explore grid, keeping the search bar: searching for
+     * something is a thing you chose to do, scrolling what the grid offers is not.
+     */
+    val hideExplore: Boolean = true,
     /** Hide the interstitial cards LinkedIn injects ("People you may know", job prompts). */
     val hideFeedModules: Boolean = true,
 )

@@ -79,6 +79,34 @@
             android:text="@string/opt_modules" />
 
         <Switch
+            android:id="@+id/optExplore"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/opt_explore" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="@string/opt_explore_sub"
+            android:textSize="12sp" />
+
+        <Switch
+            android:id="@+id/optShorts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/opt_shorts" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="@string/opt_shorts_sub"
+            android:textSize="12sp" />
+
+        <Switch
             android:id="@+id/optReels"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -3,6 +3,7 @@ package dev.amishutkin.focustube.platform
 import android.accessibilityservice.AccessibilityService
 import android.content.SharedPreferences
 import android.os.Handler
+import android.os.SystemClock
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import dev.amishutkin.focustube.core.Bounds
@@ -13,6 +14,7 @@ import dev.amishutkin.focustube.core.OverlayPlan
 import dev.amishutkin.focustube.core.Settings
 import dev.amishutkin.focustube.core.Surface
 import dev.amishutkin.focustube.core.TargetApp
+import dev.amishutkin.focustube.core.YouTubeAnalyzer
 
 /**
  * Watches the three apps named in `accessibility_service_config.xml` and keeps the
@@ -39,6 +41,9 @@ class FocusAccessibilityService : AccessibilityService() {
     /** Kept across the scroll fail-safe so the blocker windows are not torn down and
      *  rebuilt on every scroll event. */
     private var lastBlockers: List<Bounds> = emptyList()
+
+    /** When the feed last moved, so the labels can wait for it to stop. */
+    private var lastScrollAt: Long = 0L
 
     private val refresh = Runnable { update() }
 
@@ -101,7 +106,10 @@ class FocusAccessibilityService : AccessibilityService() {
         // Scrolling invalidates every hole at once: the post that earned one has moved,
         // and until the next scan says otherwise the honest thing to show is a cover.
         if (event?.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            lastFeedBounds?.let { overlay.show(app, Surface.FEED, listOf(it), lastBlockers) }
+            lastScrollAt = SystemClock.uptimeMillis()
+            lastFeedBounds?.let {
+                overlay.show(app, Surface.FEED, listOf(it), emptyList(), lastBlockers)
+            }
         }
 
         handler.removeCallbacks(refresh)
@@ -139,6 +147,7 @@ class FocusAccessibilityService : AccessibilityService() {
         val scan = when (app) {
             TargetApp.INSTAGRAM -> InstagramAnalyzer.analyze(root, settings)
             TargetApp.LINKEDIN -> LinkedInAnalyzer.analyze(root, settings)
+            TargetApp.YOUTUBE -> YouTubeAnalyzer.analyze(root, settings)
         }
 
         if (scan.isEmpty) {
@@ -156,6 +165,16 @@ class FocusAccessibilityService : AccessibilityService() {
         lastFeedBounds = tracked.feedBounds
         val bands = OverlayPlan.cover(tracked)
         val blockers = OverlayPlan.block(tracked)
+
+        // Outlines and labels only once the feed has stopped moving: mid-scroll the bounds
+        // are already stale, and a border in the wrong place is more distracting than a
+        // plain sheet. A scroll therefore schedules one more pass to draw them.
+        val settled = SystemClock.uptimeMillis() - lastScrollAt > SETTLE_MS
+        if (!settled) {
+            handler.removeCallbacks(refresh)
+            handler.postDelayed(refresh, SETTLE_MS)
+        }
+        val details = if (settled) OverlayPlan.details(tracked) else emptyList()
         if (dev.amishutkin.focustube.BuildConfig.DEBUG) {
             android.util.Log.d(
                 "FocusTube",
@@ -164,7 +183,7 @@ class FocusAccessibilityService : AccessibilityService() {
             )
         }
         lastBlockers = blockers
-        overlay.show(app, tracked.surface, bands, blockers)
+        overlay.show(app, tracked.surface, bands, details, blockers)
         armWatchdog(bands.isNotEmpty() || blockers.isNotEmpty())
     }
 
@@ -196,6 +215,9 @@ class FocusAccessibilityService : AccessibilityService() {
 
         /** How often to check we are still in the app we are covering. */
         const val WATCHDOG_MS = 400L
+
+        /** How long after the last scroll the outlines and labels are drawn. */
+        const val SETTLE_MS = 350L
 
         /** Unreadable this many times in a row means the app is gone, not just busy. */
         const val MAX_MISSES = 3

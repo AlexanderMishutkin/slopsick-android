@@ -3,7 +3,7 @@
     <string name="app_name">FocusTube</string>
     <string name="service_label">FocusTube feed filter</string>
     <string name="service_summary">Covers feed posts from accounts you don\'t follow</string>
-    <string name="service_description">Reads the feed on screen in Instagram and LinkedIn so it can cover posts you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
+    <string name="service_description">Reads the screen in Instagram, LinkedIn and YouTube so it can cover posts and videos you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
 
     <string name="status_on">Filtering is on</string>
     <string name="status_off">Filtering is off</string>
@@ -16,10 +16,23 @@
     <string name="opt_activity">LinkedIn: posts your network only reacted to</string>
     <string name="opt_activity_sub">Off, you still see what your connections liked or commented on.</string>
     <string name="opt_stories">Instagram: the stories row</string>
+    <string name="opt_explore">Instagram: the Explore grid</string>
+    <string name="opt_explore_sub">The search bar stays; only what the grid suggests is covered.</string>
+    <string name="opt_shorts">YouTube: Shorts</string>
+    <string name="opt_shorts_sub">Covers the Shorts player and makes the Shorts tab untappable.</string>
     <string name="opt_reels">Instagram: Reels</string>
     <string name="opt_reels_sub">Covers the Reels player and makes the Reels tab untappable.</string>
     <string name="opt_modules">LinkedIn: \"People you may know\" and similar cards</string>
 
+    <string name="hidden_suggested">Suggested post hidden</string>
+    <string name="hidden_promoted">Ad hidden</string>
+    <string name="hidden_module">Suggestion card hidden</string>
+    <string name="hidden_activity">Network activity hidden</string>
+    <string name="hidden_reels">Reels hidden</string>
+    <string name="hidden_explore">Explore hidden</string>
+    <string name="hidden_shorts">Shorts hidden</string>
+    <string name="hidden_generic">Hidden</string>
+
     <string name="section_privacy">Privacy</string>
-    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram and LinkedIn — the system enforces that list. Nothing is stored except the switches above.</string>
+    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram, LinkedIn and YouTube — the system enforces that list. Nothing is stored except the switches above.</string>
 </resources>

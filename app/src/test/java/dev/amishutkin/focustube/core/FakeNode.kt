@@ -73,3 +73,119 @@ fun instagramOtherScreen(): UiNode = FakeNode(
     bounds = Bounds(0, 0, 1080, 2400),
     children = listOf(instagramTabBar()),
 )
+
+/** Instagram's Explore tab: a search bar, a grid of suggestions, the tab bar. */
+fun instagramExploreScreen(): UiNode = FakeNode(
+    bounds = Bounds(0, 0, 1080, 2400),
+    children = listOf(
+        FakeNode(
+            viewId = "com.instagram.android:id/recycler_view",
+            className = "androidx.recyclerview.widget.RecyclerView",
+            bounds = Bounds(0, 63, 1080, 2211),
+        ),
+        FakeNode(
+            viewId = "com.instagram.android:id/explore_action_bar",
+            bounds = Bounds(0, 63, 1080, 210),
+            children = listOf(
+                FakeNode(
+                    viewId = "com.instagram.android:id/action_bar_search_edit_text",
+                    text = "Search",
+                    bounds = Bounds(32, 63, 939, 155),
+                ),
+            ),
+        ),
+        instagramTabBar(),
+    ),
+)
+
+/**
+ * What Explore turns into once you type something. Instagram drops the explore action
+ * bar here, which is the only thing separating "results you asked for" from "a grid of
+ * things the algorithm picked".
+ */
+fun instagramSearchResultsScreen(): UiNode = FakeNode(
+    bounds = Bounds(0, 0, 1080, 2400),
+    children = listOf(
+        FakeNode(
+            viewId = "com.instagram.android:id/recycler_view",
+            className = "androidx.recyclerview.widget.RecyclerView",
+            bounds = Bounds(0, 210, 1080, 2337),
+            children = listOf(
+                FakeNode(
+                    viewId = "com.instagram.android:id/row_search_keyword_title",
+                    text = "nasa",
+                    bounds = Bounds(0, 242, 1080, 330),
+                ),
+            ),
+        ),
+    ),
+)
+
+// --- YouTube -----------------------------------------------------------------------
+
+fun youtubeNavBar(): UiNode = FakeNode(
+    viewId = "com.google.android.youtube:id/pivot_bar",
+    bounds = Bounds(0, 2211, 1080, 2337),
+    children = listOf(
+        FakeNode(
+            bounds = Bounds(0, 2211, 1080, 2337),
+            children = listOf(
+                FakeNode(
+                    contentDesc = "Home",
+                    bounds = Bounds(0, 2211, 216, 2337),
+                    children = listOf(
+                        FakeNode(
+                            viewId = "com.google.android.youtube:id/text",
+                            text = "Home",
+                            bounds = Bounds(70, 2293, 147, 2323),
+                        ),
+                    ),
+                ),
+                FakeNode(
+                    contentDesc = "Shorts",
+                    bounds = Bounds(216, 2211, 432, 2337),
+                    children = listOf(
+                        FakeNode(
+                            viewId = "com.google.android.youtube:id/text",
+                            text = "Shorts",
+                            bounds = Bounds(283, 2293, 365, 2323),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    ),
+)
+
+fun youtubeShortsPlayer(): UiNode = FakeNode(
+    bounds = Bounds(0, 0, 1080, 2400),
+    children = listOf(
+        FakeNode(
+            viewId = "com.google.android.youtube:id/reel_watch_fragment_root",
+            bounds = Bounds(0, 63, 1080, 2211),
+        ),
+        youtubeNavBar(),
+    ),
+)
+
+/** YouTube's home feed. Each row's labels are given as one list per row. */
+fun youtubeHome(vararg rows: List<String>): UiNode = FakeNode(
+    bounds = Bounds(0, 0, 1080, 2400),
+    children = listOf(
+        FakeNode(
+            viewId = "com.google.android.youtube:id/results",
+            className = "androidx.recyclerview.widget.RecyclerView",
+            bounds = Bounds(0, 315, 1080, 2211),
+            children = rows.mapIndexed { index, labels ->
+                val top = 315 + index * 600
+                FakeNode(
+                    bounds = Bounds(0, top, 1080, top + 600),
+                    children = labels.map {
+                        FakeNode(text = it, bounds = Bounds(0, top, 1080, top + 40))
+                    },
+                )
+            },
+        ),
+        youtubeNavBar(),
+    ),
+)

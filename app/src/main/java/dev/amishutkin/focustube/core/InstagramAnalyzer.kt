@@ -33,6 +33,10 @@ object InstagramAnalyzer {
      */
     private const val REELS_VIEWER = "clips_viewer_container"
 
+    /** The search bar at the top of Explore; also the surest sign that this is Explore. */
+    private const val EXPLORE_BAR = "explore_action_bar"
+    private const val EXPLORE_GRID = "recycler_view"
+
     /**
      * Instagram has never shown an ad in any capture taken so far, so this string is the
      * one unverified signal in the file. It is also the one place a word match is
@@ -58,7 +62,24 @@ object InstagramAnalyzer {
                     feedBounds = null,
                     items = listOf(FeedItem(reels, Verdict.HIDE, Reason.REELS)),
                     surface = Surface.REELS,
-                    blackout = reels,
+                    blackouts = listOf(reels),
+                    blockers = blockers,
+                )
+            }
+        }
+
+        // Explore is a grid of things the algorithm picked, top to bottom. The search bar
+        // stays — searching is a thing you chose to do — and so does the tab bar.
+        val exploreBar = root.findById(EXPLORE_BAR)
+        if (settings.hideExplore && exploreBar != null) {
+            val region = exploreRegion(root, exploreBar)
+            if (region != null) {
+                return FeedScan(
+                    app = TargetApp.INSTAGRAM,
+                    feedBounds = null,
+                    items = listOf(FeedItem(region, Verdict.HIDE, Reason.EXPLORE)),
+                    surface = Surface.EXPLORE,
+                    blackouts = listOf(region),
                     blockers = blockers,
                 )
             }
@@ -147,6 +168,14 @@ object InstagramAnalyzer {
         // Falls back to the header's own description: "<author> posted a carousel 7 days ago".
         return header.contentDesc?.trim()?.substringBefore(" posted a ")
             ?.takeIf { it.isNotEmpty() && it != header.contentDesc?.trim() }
+    }
+
+    /** Everything between the search bar and the tab bar. */
+    private fun exploreRegion(root: UiNode, bar: UiNode): Bounds? {
+        val grid = root.findById(EXPLORE_GRID) ?: return null
+        val bottom = root.findById(TAB_BAR)?.bounds?.top ?: grid.bounds.bottom
+        val region = Bounds(grid.bounds.left, bar.bounds.bottom, grid.bounds.right, bottom)
+        return region.takeIf { !it.isEmpty }
     }
 
     private fun findFeedList(root: UiNode): UiNode? =
