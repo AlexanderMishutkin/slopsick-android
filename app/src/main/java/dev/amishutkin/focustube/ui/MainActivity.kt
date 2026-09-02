@@ -54,18 +54,13 @@ class MainActivity : Activity() {
             )
         }
 
+        // One switch per app and nothing else. What each app covers is decided in
+        // Settings' defaults rather than by the reader: a screen of eleven switches is a
+        // screen nobody reads, and every one of them is another thing to get wrong.
         switches = listOf(
             sw(R.id.optInstagram) { s, v -> s.copy(instagram = v) },
             sw(R.id.optLinkedIn) { s, v -> s.copy(linkedIn = v) },
             sw(R.id.optYouTube) { s, v -> s.copy(youtube = v) },
-            sw(R.id.optSuggested) { s, v -> s.copy(hideSuggested = v) },
-            sw(R.id.optPromoted) { s, v -> s.copy(hidePromoted = v) },
-            sw(R.id.optReels) { s, v -> s.copy(hideReels = v) },
-            sw(R.id.optExplore) { s, v -> s.copy(hideExplore = v) },
-            sw(R.id.optShorts) { s, v -> s.copy(hideShorts = v) },
-            sw(R.id.optModules) { s, v -> s.copy(hideFeedModules = v) },
-            sw(R.id.optActivity) { s, v -> s.copy(hideNetworkActivity = v) },
-            sw(R.id.optStories) { s, v -> s.copy(hideStoriesTray = v) },
         )
 
         setUpLock()

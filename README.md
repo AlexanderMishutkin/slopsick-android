@@ -178,17 +178,38 @@ Needs JDK 17+ and an Android SDK with platform 36.
 
 ```
 ./gradlew :app:assembleDebug        # APK in app/build/outputs/apk/debug/
+./gradlew :app:assembleRelease      # APK in app/build/outputs/apk/release/
 ./gradlew :app:testDebugUnitTest    # the tests below
 ```
+
+### Signing
+
+`assembleRelease` looks for `keystore.properties` in the project root, pointing at a
+keystore that lives outside the repository. Both are gitignored. Without them the release
+build still succeeds — just unsigned — so a checkout by anyone else still compiles.
+
+**The keystore is not recoverable.** Android refuses an upgrade signed by a different
+key, so losing it means everyone who installed a build has to uninstall before they can
+take another one. Back up the keystore and `keystore.properties` together.
+
+Release builds are deliberately **unminified**. The point of this app is that the shipped
+APK can be read; obfuscating it would undercut the only claim it makes.
 
 Then install it, and turn it on under Settings → Accessibility → Installed apps →
 FocusTube feed filter.
 
 ## Settings
 
-Three master switches, one per app — Instagram (which also covers instagram.com in
-Chrome), LinkedIn, YouTube. Off means that app is not touched at all. Under them are the
-individual switches for what to cover.
+Three switches and a lock, and that is the whole screen.
+
+One switch per app — Instagram (which also covers instagram.com in Chrome), LinkedIn,
+YouTube. Off means that app is not touched at all.
+
+What each app's switch *means* is decided in `Settings`' defaults rather than by the
+reader. An earlier version put all eleven flags on screen; a screen of eleven switches is
+a screen nobody reads, and every one of them is another thing to get wrong. They remain
+as fields, because the analyzers are tested through them and because exposing one later
+is a one-line change.
 
 ### The lock
 

@@ -121,10 +121,18 @@ data class FeedScan(
 
 /** User-facing switches. Defaults match the browser extension's shipped defaults. */
 data class Settings(
-    /** Master switch per app. Off means this app is not touched at all. */
+    /**
+     * Master switch per app — the only three the settings screen shows. Off means this
+     * app is not touched at all.
+     */
     val instagram: Boolean = true,
     val linkedIn: Boolean = true,
     val youtube: Boolean = true,
+
+    // The flags below are not on the settings screen. They are the shape of what each
+    // app's switch means, and they are defaults rather than questions: a screen of eleven
+    // switches is a screen nobody reads. They stay as fields because the analyzers are
+    // tested through them, and because deciding differently later is a one-line change.
     /** Hide posts from accounts you do not follow. This is the whole point of the app. */
     val hideSuggested: Boolean = true,
     /** Hide ads. Untested against a real ad — see README. */

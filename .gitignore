@@ -7,6 +7,11 @@ build/
 # Local machine paths — sdk.dir differs per checkout
 local.properties
 
+# Signing credentials. The keystore itself lives outside the repo; this points at it.
+keystore.properties
+*.jks
+*.keystore
+
 # IDE
 .idea/
 *.iml
