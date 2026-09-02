@@ -7,5 +7,5 @@
     android:description="@string/service_description"
     android:notificationTimeout="100"
     android:summary="@string/service_summary"
-    android:settingsActivity="dev.amishutkin.focustube.ui.MainActivity"
+    android:settingsActivity="dev.amishutkin.slopsick.ui.MainActivity"
     android:packageNames="com.instagram.android,com.linkedin.android,com.google.android.youtube,com.android.chrome" />

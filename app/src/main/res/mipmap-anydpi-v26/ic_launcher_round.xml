@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      The artwork sits inside the 66dp safe zone rather than filling the 108dp layer, so
+      that no launcher's mask shape can clip the lettering along its bottom edge. Its own
+      backdrop is the same colour as the background layer, so the two blend seamlessly.
+    -->
     <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>

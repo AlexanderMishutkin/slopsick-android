@@ -1,0 +1,115 @@
+package dev.amishutkin.slopsick.core
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LinkedInAnalyzerTest {
+
+    private fun scan(name: String, settings: Settings = Settings()) =
+        LinkedInAnalyzer.analyze(XmlUiNode.fixture(name), settings)
+
+    @Test
+    fun `finds the feed through the only view id LinkedIn still exposes`() {
+        val result = scan("liscroll-03.xml")
+        assertEquals(TargetApp.LINKEDIN, result.app)
+        assertTrue(result.hasFeed)
+        // One lazy column child is exactly one feed item — easier grouping than Instagram.
+        assertEquals(2, result.items.size)
+    }
+
+    @Test
+    fun `a post the feed guessed at is hidden`() {
+        val guess = scan("liscroll-03.xml").items.first()
+        assertEquals(Reason.SUGGESTED, guess.reason)
+        assertEquals(Verdict.HIDE, guess.verdict)
+    }
+
+    @Test
+    fun `what your network reacted to is kept by default and hidden on request`() {
+        val kept = scan("liscroll-05.xml").items.single { it.reason == Reason.NETWORK_ACTIVITY }
+        assertEquals(Verdict.KEEP, kept.verdict)
+
+        val hidden = scan("liscroll-05.xml", Settings(hideNetworkActivity = true))
+            .items.single { it.reason == Reason.NETWORK_ACTIVITY }
+        assertEquals(Verdict.HIDE, hidden.verdict)
+    }
+
+    @Test
+    fun `interstitial cards are not posts and go by default`() {
+        val modules = scan("liscroll-01.xml").items.filter { it.reason == Reason.FEED_MODULE }
+        assertTrue(modules.isNotEmpty())
+        assertTrue(modules.all { it.verdict == Verdict.HIDE })
+
+        val kept = scan("liscroll-01.xml", Settings(hideFeedModules = false))
+        assertTrue(kept.items.filter { it.reason == Reason.FEED_MODULE }
+            .all { it.verdict == Verdict.KEEP })
+    }
+
+    @Test
+    fun `a post with an author but no follow control is treated as a relationship`() {
+        val post = scan("liscroll-04.xml").items.first()
+        assertEquals(Reason.CONNECTION, post.reason)
+        assertEquals(Verdict.KEEP, post.verdict)
+    }
+
+    @Test
+    fun `a card with nothing on it at all is covered, not guessed at`() {
+        val item = LinkedInAnalyzer.analyze(linkedInScreen("Show more")).items.single()
+        assertEquals(Reason.NO_SIGNAL, item.reason)
+        assertEquals(Verdict.UNKNOWN, item.verdict)
+    }
+
+    /**
+     * Every LinkedIn tab is a lazy column, so without checking which one is current this
+     * covered job listings and search results — neither of which is the feed choosing
+     * things for you.
+     */
+    @Test
+    fun `only the feed tab is touched`() {
+        val jobs = LinkedInAnalyzer.analyze(
+            linkedInScreen("Software Engineer", "Apply", onFeed = false),
+        )
+        assertTrue(!jobs.hasFeed && jobs.items.isEmpty())
+    }
+
+    @Test
+    fun `a screen with no tab bar at all is left alone`() {
+        // Not being able to tell which screen this is, is not a licence to paint over it.
+        val unknown = LinkedInAnalyzer.analyze(
+            FakeNode(
+                bounds = Bounds(0, 0, 1000, 1000),
+                children = listOf(FakeNode(viewId = "sdui:lazyColumn", bounds = Bounds(0, 0, 1000, 1000))),
+            ),
+        )
+        assertTrue(!unknown.hasFeed)
+    }
+
+    /**
+     * Identity keys the cross-frame memory, so a weak one is worse than none: two posts
+     * sharing a key would inherit each other's verdicts. Only a name lifted from
+     * "View <name>'s profile" qualifies.
+     */
+    @Test
+    fun `identity comes only from a profile link`() {
+        val withProfile = scan("liscroll-04.xml").items.first()
+        assertNotNull(withProfile.identity)
+        assertTrue(withProfile.identity!!.startsWith("li:"))
+
+        val timestampOnly = scan("liscroll-07.xml").items.last()
+        assertNull(
+            "a timestamp like \"13h\" must never become an identity",
+            timestampOnly.identity,
+        )
+    }
+
+    @Test
+    fun `identities are unique within a frame`() {
+        for (file in XmlUiNode.fixtures().filter { it.name.startsWith("liscroll-0") }) {
+            val ids = LinkedInAnalyzer.analyze(XmlUiNode.load(file)).items.mapNotNull { it.identity }
+            assertEquals(file.name, ids.size, ids.toSet().size)
+        }
+    }
+}

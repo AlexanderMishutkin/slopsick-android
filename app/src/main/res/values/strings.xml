@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">FocusTube</string>
-    <string name="service_label">FocusTube feed filter</string>
+    <string name="app_name">SLOPSICK</string>
+    <string name="service_label">SLOPSICK feed filter</string>
     <string name="service_summary">Covers feed posts from accounts you don\'t follow</string>
     <string name="service_description">Reads the screen in Instagram, LinkedIn and YouTube so it can cover posts and videos you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
 
     <string name="status_on">Filtering is on</string>
     <string name="status_off">Filtering is off</string>
-    <string name="status_off_hint">FocusTube needs accessibility access to read what is on screen. Turn it on under Installed apps.</string>
+    <string name="status_off_hint">SLOPSICK needs accessibility access to read what is on screen. Turn it on under Installed apps.</string>
     <string name="open_settings">Open accessibility settings</string>
 
     <string name="section_apps">Apps</string>

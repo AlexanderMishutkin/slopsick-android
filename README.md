@@ -1,9 +1,9 @@
-# FocusTube for Android
+# SLOPSICK for Android
 
 Covers the posts you did not ask to see — in the Instagram, LinkedIn and YouTube apps,
 and on instagram.com in Chrome.
 
-It is the same idea as the [browser extension](https://github.com/apmishutkin/FocusTube)
+It is the same idea as the [browser extension](https://github.com/apmishutkin/SLOPSICK)
 — keep what you follow, lose what the feed picked for you — carried onto a phone,
 where the rules are different and worse.
 
@@ -153,7 +153,7 @@ region stays covered.
   what it reads anywhere, whatever the code says. Check it yourself:
 
   ```
-  adb shell dumpsys package dev.amishutkin.focustube | grep -A5 "requested permissions"
+  adb shell dumpsys package dev.amishutkin.slopsick | grep -A5 "requested permissions"
   ```
 
   (there is no such section, because there are none)
@@ -196,7 +196,7 @@ Release builds are deliberately **unminified**. The point of this app is that th
 APK can be read; obfuscating it would undercut the only claim it makes.
 
 Then install it, and turn it on under Settings → Accessibility → Installed apps →
-FocusTube feed filter.
+SLOPSICK feed filter.
 
 ## Settings
 
@@ -251,8 +251,8 @@ If you need to see the ids on a screen `uiautomator` cannot read, a debug build 
 them (**view ids and geometry only, never text**):
 
 ```
-adb shell setprop log.tag.FocusTubeTree VERBOSE
-adb logcat -s FocusTubeTree
+adb shell setprop log.tag.SlopsickTree VERBOSE
+adb logcat -s SlopsickTree
 ```
 
 After `adb install -r`, the accessibility framework keeps the old, now-dead service bound
@@ -260,10 +260,10 @@ and silently delivers it nothing. Force-stop the app and toggle the service off 
 or you will spend a while debugging code that is not running:
 
 ```
-adb shell am force-stop dev.amishutkin.focustube
+adb shell am force-stop dev.amishutkin.slopsick
 adb shell settings put secure enabled_accessibility_services ''
 adb shell settings put secure accessibility_enabled 0
-adb shell settings put secure enabled_accessibility_services dev.amishutkin.focustube/dev.amishutkin.focustube.platform.FocusAccessibilityService
+adb shell settings put secure enabled_accessibility_services dev.amishutkin.slopsick/dev.amishutkin.slopsick.platform.SlopsickAccessibilityService
 adb shell settings put secure accessibility_enabled 1
 ```
 
@@ -307,7 +307,7 @@ Being specific, because the gaps matter more than the features:
 ## Layout
 
 ```
-app/src/main/java/dev/amishutkin/focustube/
+app/src/main/java/dev/amishutkin/slopsick/
   core/       no Android imports; pure functions over a UiNode tree — this is the part
               that is tested
   platform/   the accessibility service, the overlay window, the settings store

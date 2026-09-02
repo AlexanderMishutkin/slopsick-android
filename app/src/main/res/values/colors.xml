@@ -3,6 +3,7 @@
     <!-- Same green as the browser extension's fork branding. -->
     <color name="accent">#00964F</color>
     <color name="accent_bright">#3DDC84</color>
-    <color name="ic_launcher_background">#0E1712</color>
+    <!-- The backdrop of the logo artwork, so the adaptive layers blend. -->
+    <color name="ic_launcher_background">#2F2F2F</color>
     <color name="cover">#111517</color>
 </resources>

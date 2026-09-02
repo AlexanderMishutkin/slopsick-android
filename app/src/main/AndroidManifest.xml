@@ -33,7 +33,7 @@
         </activity>
 
         <service
-            android:name=".platform.FocusAccessibilityService"
+            android:name=".platform.SlopsickAccessibilityService"
             android:exported="true"
             android:label="@string/service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

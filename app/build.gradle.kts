@@ -13,11 +13,11 @@ val signing = Properties().apply {
 }
 
 android {
-    namespace = "dev.amishutkin.focustube"
+    namespace = "dev.amishutkin.slopsick"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "dev.amishutkin.focustube"
+        applicationId = "dev.amishutkin.slopsick"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

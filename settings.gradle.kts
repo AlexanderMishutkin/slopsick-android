@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FocusTube"
+rootProject.name = "Slopsick"
 include(":app")
