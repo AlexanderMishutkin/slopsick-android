@@ -221,6 +221,29 @@ It is a promise the app makes to you, not a security measure. Android's own acce
 toggle is always there and nothing here tries to make that harder — a lock that fought
 the user for control of their own phone would be a worse thing than the feed.
 
+### Installing it
+
+Install with an installer attributed:
+
+```
+adb install -r -i com.android.vending SLOPSICK-1.0.0.apk
+```
+
+The `-i` matters. A plain `adb install` leaves `installerPackageName=null`, and Android 13+
+treats an app with no installer as sideloaded and puts it behind **restricted settings** —
+the gate that governs accessibility access specifically. The symptom is not an error: the
+service can be switched on, works fine, and is then silently revoked on the next reboot,
+with `accessibility_enabled` back to `0` and the service marked crashed with no exception
+anywhere in the logs. It cost an evening to find on a Xiaomi running Android 16.
+
+Installing from a file manager hits the same gate earlier — the install itself is refused.
+The manual equivalent of the flag is Settings → Apps → SLOPSICK → ⋮ → **Allow restricted
+settings**.
+
+On phones with aggressive power management (Xiaomi, Samsung, Huawei), also grant Autostart
+and set the battery policy to unrestricted. That is a *separate* mechanism from the one
+above: it kills the process under memory pressure rather than at boot.
+
 **It runs on its own.** An accessibility service is bound by the system, not by the app's
 UI: once switched on it runs whenever the phone is on, from boot, whether or not the
 settings screen has ever been opened, and it comes straight back if its process is killed.
