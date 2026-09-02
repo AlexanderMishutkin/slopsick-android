@@ -174,6 +174,8 @@ permission.
 
 ## Building
 
+See [INSTALL.md](INSTALL.md) for the full story, including signing and the emulator.
+
 Needs JDK 17+ and an Android SDK with platform 36.
 
 ```
@@ -221,28 +223,10 @@ It is a promise the app makes to you, not a security measure. Android's own acce
 toggle is always there and nothing here tries to make that harder — a lock that fought
 the user for control of their own phone would be a worse thing than the feed.
 
-### Installing it
-
-Install with an installer attributed:
-
-```
-adb install -r -i com.android.vending SLOPSICK-1.0.0.apk
-```
-
-The `-i` matters. A plain `adb install` leaves `installerPackageName=null`, and Android 13+
-treats an app with no installer as sideloaded and puts it behind **restricted settings** —
-the gate that governs accessibility access specifically. The symptom is not an error: the
-service can be switched on, works fine, and is then silently revoked on the next reboot,
-with `accessibility_enabled` back to `0` and the service marked crashed with no exception
-anywhere in the logs. It cost an evening to find on a Xiaomi running Android 16.
-
-Installing from a file manager hits the same gate earlier — the install itself is refused.
-The manual equivalent of the flag is Settings → Apps → SLOPSICK → ⋮ → **Allow restricted
-settings**.
-
-On phones with aggressive power management (Xiaomi, Samsung, Huawei), also grant Autostart
-and set the battery policy to unrestricted. That is a *separate* mechanism from the one
-above: it kills the process under memory pressure rather than at boot.
+**Installing it: see [INSTALL.md](INSTALL.md).** One thing there is worth repeating
+here, because it fails silently: install with `adb install -r -i com.android.vending`.
+Without an installer attributed, Android 13+ treats the app as sideloaded and revokes its
+accessibility access at the next reboot, with no error anywhere.
 
 **It runs on its own.** An accessibility service is bound by the system, not by the app's
 UI: once switched on it runs whenever the phone is on, from boot, whether or not the
@@ -338,3 +322,15 @@ app/src/main/java/dev/amishutkin/slopsick/
 app/src/test/ the tests, and 46 anonymised device captures
 tools/        the anonymiser
 ```
+
+## Licence
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — use, modify and share it for anything that is
+not primarily for commercial advantage, with no warranty and no liability.
+
+That is deliberately **not** an OSI-approved open source licence; restricting the field of
+use is exactly what the Open Source Definition forbids, so hosts will label it "Other".
+
+The code here is original. It shares no code with the MIT-licensed browser extension it
+takes its idea from — only the idea, which is not copyrightable. The extension fork is a
+separate repository and stays MIT.
