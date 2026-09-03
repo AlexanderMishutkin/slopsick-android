@@ -28,7 +28,7 @@
     <string name="opt_suggested">Posts from accounts you don\'t follow</string>
     <string name="opt_promoted">Ads and promoted posts</string>
     <string name="opt_activity">LinkedIn: posts your network only reacted to</string>
-    <string name="opt_activity_sub">Off, you still see what your connections liked or commented on.</string>
+    <string name="opt_activity_sub">Off, you also see posts your connections merely liked or commented on.</string>
     <string name="opt_stories">Instagram: the stories row</string>
     <string name="opt_explore">Instagram: the Explore grid</string>
     <string name="opt_explore_sub">The search bar stays; only what the grid suggests is covered.</string>

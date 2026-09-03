@@ -160,10 +160,11 @@ data class Settings(
     /** Hide ads. Untested against a real ad — see README. */
     val hidePromoted: Boolean = true,
     /**
-     * LinkedIn only. Off: you still see what your network reacted to. On: only posts
-     * from your connections and the pages you follow survive.
+     * LinkedIn only. On: only posts from your connections and the pages you follow
+     * survive. A stranger's post that a connection happened to like is a post the feed
+     * chose for you, which is the same thing as a suggestion wearing a friend's name.
      */
-    val hideNetworkActivity: Boolean = false,
+    val hideNetworkActivity: Boolean = true,
     /**
      * Hide the stories row at the top of Instagram's feed. Off: stories are people you
      * followed on purpose, and they are kept in the app and on the web alike.

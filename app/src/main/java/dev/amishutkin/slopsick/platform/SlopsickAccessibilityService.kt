@@ -20,6 +20,7 @@ import dev.amishutkin.slopsick.core.Settings
 import dev.amishutkin.slopsick.core.Surface
 import dev.amishutkin.slopsick.core.TargetApp
 import dev.amishutkin.slopsick.core.UiNode
+import dev.amishutkin.slopsick.core.Verdict
 import dev.amishutkin.slopsick.core.YouTubeAnalyzer
 import kotlin.math.abs
 
@@ -171,6 +172,25 @@ class SlopsickAccessibilityService : AccessibilityService() {
 
     /** Consecutive scans that could not read the window at all. */
     private var unreadable = 0
+
+    /** Consecutive scans that recognised nothing on a feed that had been recognised. */
+    private var blindFrames = 0
+
+    /**
+     * Whether this scan has lost sight of a feed the last one could read, without the
+     * screen having moved. Only ever true once in a row: [blindFrames] makes the second
+     * such frame authoritative, so a feed that genuinely emptied is still covered.
+     */
+    private fun blind(next: FeedScan): Boolean {
+        if (blindFrames > 0) return false
+        val previous = lastScan ?: return false
+        if (previous.surface != next.surface || next.surface != Surface.FEED) return false
+        if (SystemClock.uptimeMillis() - lastScrollAt < SETTLE_MS) return false
+        if (previous.feedBounds != next.feedBounds) return false
+        val knewSomething = previous.items.any { it.verdict != Verdict.UNKNOWN }
+        val knowsNothing = next.items.none { it.verdict != Verdict.UNKNOWN }
+        return knewSomething && knowsNothing
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -370,6 +390,20 @@ class SlopsickAccessibilityService : AccessibilityService() {
         // Reels has no posts to weigh, so there is nothing for the ledger to remember and
         // running it would only leave stale verdicts behind for the feed.
         val tracked = if (scan.surface == Surface.FEED) ledger.observe(scan) else scan
+
+        // A frame that has suddenly stopped recognising a feed it recognised a moment ago,
+        // on a screen that has not moved, is far more likely to be a half-built tree than
+        // a feed that really changed — an app mid-relayout, or a video swapping surfaces.
+        // Believing it means covering the whole feed for one frame and uncovering it on
+        // the next, which is what "it blinks white" is. So it is given one chance to say
+        // the same thing twice; only a second frame agreeing is taken seriously.
+        if (blind(tracked)) {
+            blindFrames += 1
+            main.removeCallbacks(scanTick)
+            main.postDelayed(scanTick, RETRY_MS)
+            return
+        }
+        blindFrames = 0
         lastScan = tracked
         driftSinceScan = 0
 
@@ -472,6 +506,7 @@ class SlopsickAccessibilityService : AccessibilityService() {
         main.removeCallbacks(watchdog)
         misses = 0
         unreadable = 0
+        blindFrames = 0
         navBars.clear()
         currentApp = null
         lastScan = null

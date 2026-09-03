@@ -83,20 +83,25 @@ class OverlayController(private val context: Context) {
     private var blockerViews = mutableListOf<Pair<Bounds, View>>()
     private var reportViews = mutableListOf<Pair<Bounds, ReportView>>()
 
-    /**
-     * Where the overlay window's own (0,0) sits on the display.
+    /*
+     * A note on coordinates, because the two kinds of window here do not agree.
      *
      * Everything this class is handed is in screen coordinates, because that is what an
-     * accessibility tree reports. A full-screen window laid out with FLAG_LAYOUT_IN_SCREEN
-     * is *supposed* to start at the top-left of the display, and on the emulator it does.
-     * On a Xiaomi running Android 16 it does not: the window begins below the status bar,
-     * so a band asked for at y=138 was painted at y=276. That put a 138-pixel strip of
-     * live feed above the cover and pushed the bottom of the cover down over the app's own
-     * tab bar — reported, correctly, as "too much space on top, navbar covered".
+     * accessibility tree reports.
      *
-     * So it is measured rather than assumed. [CoverView] reports what it actually got.
+     * The **cover** is one MATCH_PARENT window and the bands are drawn inside it, so it
+     * depends on the window starting at the top-left of the display. On the emulator it
+     * does. On a Xiaomi running Android 16 it starts below the status bar instead, and a
+     * band asked for at y=138 was painted at y=276 — a strip of live feed above the cover
+     * and the bottom of it pushed down over the app's own tab bar. [CoverView] therefore
+     * measures where it landed and takes the difference out of the canvas.
+     *
+     * The **blockers and buttons** are not painted into a window, they *are* windows,
+     * placed by the window manager from explicit x/y with FLAG_LAYOUT_IN_SCREEN. Those
+     * coordinates are already display-relative. Correcting them by the same offset moved
+     * the blocked Reels tab a status bar's height up off the tab bar, which put the button
+     * back in reach — so they are passed through untouched.
      */
-    private var origin = intArrayOf(0, 0)
 
     /** Called with the covered region whose report button was tapped. */
     var onReport: ((Bounds) -> Unit)? = null
@@ -177,19 +182,6 @@ class OverlayController(private val context: Context) {
         }
     }
 
-    /** The window turned out not to start where it was asked to; move the small ones. */
-    private fun reorigin(x: Int, y: Int) {
-        if (origin[0] == x && origin[1] == y) return
-        origin[0] = x
-        origin[1] = y
-        for ((bounds, blocker) in blockerViews) {
-            runCatching { windows.updateViewLayout(blocker, blockerParams(bounds)) }
-        }
-        for ((region, button) in reportViews) {
-            runCatching { windows.updateViewLayout(button, reportParams(region)) }
-        }
-    }
-
     private fun dp(value: Float) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, value, context.resources.displayMetrics,
     ).toInt()
@@ -206,7 +198,6 @@ class OverlayController(private val context: Context) {
             return
         }
         val target = view ?: CoverView(context).also {
-            it.onOrigin = { x, y -> reorigin(x, y) }
             val added = runCatching { windows.addView(it, coverParams()) }
             if (added.isFailure) {
                 Log.w(TAG, "could not add overlay window", added.exceptionOrNull())
@@ -292,8 +283,8 @@ class OverlayController(private val context: Context) {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         gravity = Gravity.TOP or Gravity.START
-        x = (region.right - size - inset).coerceAtLeast(region.left) - origin[0]
-        y = (region.top + inset).coerceAtMost(region.bottom - size) - origin[1]
+        x = (region.right - size - inset).coerceAtLeast(region.left)
+        y = (region.top + inset).coerceAtMost(region.bottom - size)
         width = size
         height = size
     }
@@ -308,8 +299,8 @@ class OverlayController(private val context: Context) {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         gravity = Gravity.TOP or Gravity.START
-        x = bounds.left - origin[0]
-        y = bounds.top - origin[1]
+        x = bounds.left
+        y = bounds.top
         width = bounds.width
         height = bounds.height
     }
@@ -323,9 +314,7 @@ class OverlayController(private val context: Context) {
         /** Nothing is painted at or below this row. See [OverlayController.show]. */
         private var floor: Int = Int.MAX_VALUE
 
-        /** Told where this view actually landed, so the small windows can follow. */
-        var onOrigin: ((Int, Int) -> Unit)? = null
-
+        /** Where this view actually landed on the display; see the note above. */
         private val here = IntArray(2)
 
         private val fill = Paint().apply { isAntiAlias = false }
@@ -383,7 +372,6 @@ class OverlayController(private val context: Context) {
             // put a strip of live feed above the cover and pushed the bottom of the cover
             // down over the app's own tab bar.
             getLocationOnScreen(here)
-            onOrigin?.invoke(here[0], here[1])
             if (DEBUG) {
                 val (t, b) = systemBarInsets()
                 Log.d(

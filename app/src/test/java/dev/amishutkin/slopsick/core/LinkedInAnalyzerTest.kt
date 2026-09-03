@@ -28,13 +28,15 @@ class LinkedInAnalyzerTest {
     }
 
     @Test
-    fun `what your network reacted to is kept by default and hidden on request`() {
-        val kept = scan("liscroll-05.xml").items.single { it.reason == Reason.NETWORK_ACTIVITY }
-        assertEquals(Verdict.KEEP, kept.verdict)
-
-        val hidden = scan("liscroll-05.xml", Settings(hideNetworkActivity = true))
-            .items.single { it.reason == Reason.NETWORK_ACTIVITY }
+    fun `what your network reacted to goes by default, and can be kept`() {
+        // A stranger's post that a connection happened to like is a post the feed chose
+        // for you — a suggestion wearing a friend's name.
+        val hidden = scan("liscroll-05.xml").items.single { it.reason == Reason.NETWORK_ACTIVITY }
         assertEquals(Verdict.HIDE, hidden.verdict)
+
+        val kept = scan("liscroll-05.xml", Settings(hideNetworkActivity = false))
+            .items.single { it.reason == Reason.NETWORK_ACTIVITY }
+        assertEquals(Verdict.KEEP, kept.verdict)
     }
 
     @Test
