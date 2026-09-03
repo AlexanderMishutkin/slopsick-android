@@ -49,8 +49,8 @@
 
     <string name="section_reports">Bug reports</string>
     <string name="opt_reports">Report button on every cover</string>
-    <string name="reports_hint">Tap the 👇 on a cover when it gets something wrong. SLOPSICK writes the screen layout, what it made of it, and a screenshot taken with the cover down.</string>
-    <string name="reports_privacy">Those files contain the posts that were on screen. They are written to this app\'s own folder on the phone and go nowhere else — there is no internet permission. Collect them over USB:\n\nadb pull /sdcard/Android/data/dev.amishutkin.slopsick/files/reports</string>
+    <string name="reports_hint">Tap the 👎 on a cover when it gets something wrong. SLOPSICK writes the screen layout, what it made of it, and a screenshot of the covers.</string>
+    <string name="reports_privacy">The screenshot shows the covers, not what is under them. The layout file does hold the text of the posts that were on screen — that is what makes a report reproducible. Both are written to this app\'s own folder on the phone and go nowhere else; there is no internet permission. Collect them over USB:\n\nadb pull /sdcard/Android/data/dev.amishutkin.slopsick/files/reports</string>
     <string name="report_saved">Report saved: %1$s</string>
     <string name="report_failed">Could not write the report</string>
 

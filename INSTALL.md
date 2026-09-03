@@ -170,7 +170,7 @@ string on every pass and will cost you frames.
 ### Collecting bug reports off the phone
 
 The tree dumper needs a cable and a running logcat. The report button does not: tap the
-👇 on a cover when it gets something wrong, and the phone writes the tree, the verdicts
+👎 on a cover when it gets something wrong, and the phone writes the tree, the verdicts
 and a screenshot to its own folder. Pick them up whenever the phone is next plugged in:
 
 ```
@@ -181,7 +181,7 @@ Each report is a folder named `<timestamp>-<app>` holding:
 
 - `tree.xml` — the accessibility tree in `uiautomator dump` format
 - `report.json` — the analyzer's verdicts, the regions painted, the app version, the device
-- `screen.png` — the screen with the overlay taken down
+- `screen.png` — the screen with the covers up, which is what a report about alignment or a border is about
 
 `tree.xml` is in the same format as the test fixtures, so a report becomes a regression
 test in one step:
@@ -191,9 +191,9 @@ mkdir /tmp/incoming && cp reports/20260903-115930-instagram/tree.xml /tmp/incomi
 python3 tools/anonymize.py /tmp/incoming app/src/test/resources/fixtures
 ```
 
-**Reports contain the posts that were on screen.** They stay on the phone until you pull
-them — the app has no INTERNET permission — but do run the anonymiser before committing
-anything, and clear them when you are done:
+**`tree.xml` contains the posts that were on screen**; the screenshot does not. They stay
+on the phone until you pull them — the app has no INTERNET permission — but do run the
+anonymiser before committing anything, and clear them when you are done:
 
 ```
 adb shell rm -rf /sdcard/Android/data/dev.amishutkin.slopsick/files/reports
@@ -252,6 +252,6 @@ SharedPreferences and writes nowhere else.
 | Stopped after a day of use | The phone's power management killed it | Autostart + unrestricted battery + lock in recents |
 | Stopped right after reinstalling | Old dead service still bound | The force-stop and toggle sequence above |
 | Nothing covered, service bound | Not on a screen it reads | It only reads the feed — profiles, chats and search are left alone |
-| Covers the wrong thing | The app changed its layout | Tap the 👇 on the cover, then `adb pull` the report |
-| No 👇 on the covers | Reporting is switched off, or the band is too short to hold one | Turn on **Report button on every cover** in SLOPSICK |
+| Covers the wrong thing | The app changed its layout | Tap the 👎 on the cover, then `adb pull` the report |
+| No 👎 on the covers | Reporting is switched off, or the band is too short to hold one | Turn on **Report button on every cover** in SLOPSICK |
 | The tab bar is covered | Should not happen any more — the bar is found by shape as well as by id | Report it; that is the one failure worth a bug report on its own |

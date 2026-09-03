@@ -106,16 +106,16 @@ class OverlayController(private val context: Context) {
     }
 
     /**
-     * Everything drawn, made invisible for a moment.
+     * The report buttons, made invisible for a moment.
      *
-     * A screenshot taken for a bug report has to show what is *underneath* the cover —
-     * a picture of our own rectangles would say nothing that report.json does not
-     * already say. The windows stay in place, so nothing has to be rebuilt afterwards.
+     * A bug report's screenshot shows the covers as they landed — that is what a report
+     * about alignment or a border is about, and it is a picture with no feed content in
+     * it, which is the point. The buttons themselves come down for the shutter because
+     * one of them sits on the top-right corner of the very outline being complained
+     * about. The windows stay in place, so nothing has to be rebuilt afterwards.
      */
-    fun setPainting(on: Boolean) {
-        val visibility = if (on) View.VISIBLE else View.INVISIBLE
-        view?.visibility = visibility
-        for ((_, blocker) in blockerViews) blocker.visibility = visibility
+    fun setReportsVisible(visible: Boolean) {
+        val visibility = if (visible) View.VISIBLE else View.INVISIBLE
         for ((_, button) in reportViews) button.visibility = visibility
     }
 
@@ -420,7 +420,7 @@ class OverlayController(private val context: Context) {
     /**
      * The button on a cover that says "this one is wrong".
      *
-     * Deliberately quiet: a translucent chip with a pointing finger on it. It has to be
+     * Deliberately quiet: a translucent chip with a thumbs-down on it. It has to be
      * findable when you want it and ignorable the rest of the time, because it sits on
      * every covered post.
      */
@@ -480,7 +480,7 @@ class OverlayController(private val context: Context) {
         }
 
         private companion object {
-            const val GLYPH = "\uD83D\uDC47"
+            const val GLYPH = "\uD83D\uDC4E"
         }
     }
 }

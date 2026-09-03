@@ -252,14 +252,14 @@ Everything this tool gets wrong, it gets wrong about a particular screen, on a p
 build of a particular app, in a particular language. None of that survives being described
 from memory, and none of it reproduces on another device. So the cover carries a button.
 
-Tap the 👇 in the corner of a cover when it gets something wrong, and SLOPSICK writes
+Tap the 👎 in the corner of a cover when it gets something wrong, and SLOPSICK writes
 three files:
 
 | file | what it is |
 | --- | --- |
 | `tree.xml` | the accessibility tree, in `uiautomator dump` format — the same format the test fixtures are in, so it drops straight into the corpus and becomes a test |
 | `report.json` | what the analyzer made of that tree: every item, its verdict and reason, the regions painted, the app's version, the device |
-| `screen.png` | taken with the overlay down, so it shows what was underneath |
+| `screen.png` | taken with the covers **up** — where the rectangles landed is what the reports are about, and it means the folder does not fill with pictures of the feed |
 
 Collect them over USB:
 
@@ -273,8 +273,10 @@ To turn one into a test, anonymise it and drop it in:
 python3 tools/anonymize.py <dir-with-tree.xml> app/src/test/resources/fixtures
 ```
 
-**These files contain the posts that were on screen** — names, photographs, text. They
-sit in this app's own directory and go nowhere else; there is no INTERNET permission.
+**`tree.xml` contains the posts that were on screen** — names, handles, text — because
+that is what the analyzer reads, and a report without it cannot reproduce anything. The
+screenshot does not: it is a picture of the covers. All of it sits in this app's own
+directory and goes nowhere else; there is no INTERNET permission.
 Nothing is written unless you tap the button, and the button only exists while the
 reporting switch is on. Delete them when you are done:
 

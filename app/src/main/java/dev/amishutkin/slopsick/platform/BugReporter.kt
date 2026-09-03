@@ -34,14 +34,19 @@ import java.util.concurrent.Executor
  *    is built against was made this way.
  *  - `report.json`, what the analyzer made of that tree: every item, its verdict, the
  *    reason, and the rectangles that were painted.
- *  - `screen.png`, taken with the overlay hidden, so it shows what was underneath.
+ *  - `screen.png`, taken with the covers **up**. Most of what goes wrong here is where a
+ *    rectangle landed — a border in the wrong place, a bar covered, a strip left showing —
+ *    and that is a picture of the covers, not of the feed. It also means the folder does
+ *    not fill up with screenshots of the thing this app exists to stop you looking at.
  *
  * ## What this costs, said plainly
  *
- * These files contain other people's posts — names, photographs, text. They are written
- * to this app's own directory on the device and go nowhere else: the app holds no
- * INTERNET permission, so it cannot send them anywhere, whatever any of this code says.
- * Collecting them means plugging the phone in:
+ * `tree.xml` still contains other people's posts — names, handles, text — because that is
+ * what the analyzer reads and a report that leaves it out cannot reproduce anything. The
+ * screenshot does not. All of it is written to this app's own directory on the device and
+ * goes nowhere else: the app holds no INTERNET permission, so it cannot send anything
+ * anywhere, whatever the rest of this code says. Collecting them means plugging the phone
+ * in:
  *
  *     adb pull /sdcard/Android/data/dev.amishutkin.slopsick/files/reports
  *
@@ -92,6 +97,7 @@ class BugReporter(private val context: Context) {
 
     // --- the screenshot --------------------------------------------------------------
 
+    /** The display as it is, covers included — see the note on `screen.png` above. */
     private fun screenshot(service: AccessibilityService, file: File, done: () -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return done()
         runCatching {

@@ -369,10 +369,12 @@ class SlopsickAccessibilityService : AccessibilityService() {
     /**
      * Writes a report for the region whose button was tapped.
      *
-     * The overlay is taken down for the length of the capture, because a screenshot of
-     * our own rectangles would show nothing that report.json does not already say — what
-     * is wanted is the screen underneath. One frame is not enough for the compositor to
-     * catch up, hence the small delay before the shutter and after it.
+     * The screenshot is taken with the covers **up**. An earlier version took them down
+     * to show what was underneath, which made a better picture and a worse tool: the
+     * reports are about where the rectangles landed, and a folder of screenshots of the
+     * feed is the one thing this app exists to stop you looking at. What comes down for
+     * the shutter is the buttons, one of which sits on the corner of the outline you are
+     * most likely to be complaining about.
      */
     private fun report(region: Bounds) {
         val app = currentApp ?: return
@@ -381,11 +383,11 @@ class SlopsickAccessibilityService : AccessibilityService() {
         val tree = lastTree
         val scan = lastScan
         val used = settings
-        overlay.setPainting(false)
+        overlay.setReportsVisible(false)
         main.postDelayed({
             reporter.capture(this, app, region, tree, scan, used) { dir ->
                 main.post {
-                    overlay.setPainting(true)
+                    overlay.setReportsVisible(true)
                     reporting = false
                     val name = dir?.name
                     android.widget.Toast.makeText(
@@ -466,7 +468,7 @@ class SlopsickAccessibilityService : AccessibilityService() {
         /** What [AccessibilityEvent.getScrollDeltaY] returns when the view did not set it. */
         const val UNSET_DELTA = -1
 
-        /** How long the overlay stays down before a bug report's screenshot is taken. */
-        const val SHUTTER_MS = 120L
+        /** How long the report buttons stay down before the screenshot is taken. */
+        const val SHUTTER_MS = 80L
     }
 }
