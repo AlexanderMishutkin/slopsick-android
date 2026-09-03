@@ -52,11 +52,30 @@ class ScreenChromeTest {
     }
 
     @Test
-    fun `found neither way, the bottom of the screen is still left alone`() {
-        val chrome = ScreenChrome.of(screenWith(), navBarId = "tab_bar")
+    fun `an unrecognised bar still keeps the bottom of the screen`() {
+        // Something down there is bar-shaped, so whatever it is, stay off it.
+        val unknown = FakeNode(bounds = Bounds(0, 2211, 1080, 2337))
+        val chrome = ScreenChrome.of(screenWith(unknown), navBarId = "tab_bar")
         assertNull(chrome.navBar)
-        assertTrue("a missing bar must not mean a full-height cover", chrome.floor < 2300)
+        assertTrue("a bar-shaped thing must not be painted over", chrome.floor <= 2211)
         assertTrue(chrome.floor > 2100)
+    }
+
+    @Test
+    fun `with nothing bar-shaped down there, the feed runs to the bottom`() {
+        // YouTube hides its own navigation bar on scroll, and then the last inch of the
+        // screen really is feed. Leaving it uncovered showed as a strip of Shorts.
+        val row = FakeNode(bounds = Bounds(0, 1200, 1080, 2337))
+        val chrome = ScreenChrome.of(screenWith(row), navBarId = "pivot_bar")
+        assertNull(chrome.navBar)
+        assertEquals(2400, chrome.floor)
+    }
+
+    @Test
+    fun `a thin divider at the bottom does not count as bar-shaped`() {
+        val divider = FakeNode(bounds = Bounds(0, 2280, 1080, 2337))
+        val chrome = ScreenChrome.of(screenWith(divider), navBarId = "pivot_bar")
+        assertEquals(2400, chrome.floor)
     }
 
     @Test
@@ -130,16 +149,25 @@ class ScreenChromeTest {
     }
 
     @Test
-    fun `every captured screen keeps its navigation bar`() {
+    fun `no captured screen has its navigation bar painted over`() {
+        // The three apps publish an id for their bar. Wherever one of those is on screen,
+        // the floor has to stop at it — whether or not the id is the thing that found it.
+        val ids = listOf("tab_bar", "bottom_nav_container", "pivot_bar", "home_bottom_bar")
+        // LinkedIn's outer bar view starts three pixels above the row of buttons it holds,
+        // on a shadow. Three pixels of a shadow is not a bricked app.
+        val slack = 4
+        var checked = 0
         for (file in XmlUiNode.fixtures()) {
             val root = XmlUiNode.load(file)
-            val chrome = ScreenChrome.of(root)
-            val height = chrome.screen.height
+            val bar = ids.firstNotNullOfOrNull { root.findById(it)?.bounds }
+                ?.takeIf { !it.isEmpty } ?: continue
+            checked += 1
             assertTrue(
-                "${file.name}: floor ${chrome.floor} would paint over the bottom bar",
-                chrome.floor <= chrome.screen.bottom - height * 0.02,
+                "${file.name}: floor ${ScreenChrome.of(root).floor} runs into bar $bar",
+                ScreenChrome.of(root).floor <= bar.top + slack,
             )
         }
+        assertTrue("expected most captures to show a navigation bar", checked >= 40)
     }
 }
 

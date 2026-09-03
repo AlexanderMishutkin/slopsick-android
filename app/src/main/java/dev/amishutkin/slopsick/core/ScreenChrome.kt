@@ -20,9 +20,12 @@ package dev.amishutkin.slopsick.core
  *     flush with the bottom of the screen, as wide as the screen, a few percent of its
  *     height, holding three to six equally-sized controls side by side. No app in this
  *     set draws anything else like that, and no version bump changes it.
- *  3. **By giving up safely.** Found neither way, the bottom [NO_NAV_MARGIN] of the
- *     screen is left alone regardless. Covering a little less than we could is a bad
- *     day; covering the navigation bar is a bricked app.
+ *  3. **By giving up carefully.** Found neither way, the question becomes whether there
+ *     is *anything* along the bottom shaped like a bar. If there is, the bottom
+ *     [NO_NAV_MARGIN] of the screen is left alone — covering a little less than we could
+ *     is a bad day, covering the navigation bar is a bricked app. If there is nothing of
+ *     the sort down there, the bar is genuinely gone (YouTube hides its own on scroll)
+ *     and the feed runs to the bottom of the display.
  *
  * Only the bottom bar gets the structural treatment. The same three rules were tried on
  * the top bar and had to be withdrawn: Instagram hides its toolbar on scroll, and with
@@ -38,16 +41,17 @@ data class ScreenChrome(
     val topBar: Bounds?,
     /** The app's bottom navigation bar, if it has one on this screen. */
     val navBar: Bounds?,
+    /**
+     * The floor to use when no navigation bar was found — see [ScreenChrome] for why
+     * that is not simply the bottom of the screen.
+     */
+    val fallbackFloor: Int = 0,
 ) {
     /** First row that may be painted. */
     val ceiling: Int get() = maxOf(topBar?.bottom ?: screen.top, screen.top)
 
     /** First row that may *not* be painted. */
-    val floor: Int
-        get() = minOf(
-            navBar?.top ?: (screen.bottom - (screen.height * NO_NAV_MARGIN).toInt()),
-            screen.bottom,
-        )
+    val floor: Int get() = minOf(navBar?.top ?: fallbackFloor, screen.bottom)
 
     /** Everything between the two bars. */
     val safe: Bounds get() = Bounds(screen.left, ceiling, screen.right, floor)
@@ -71,8 +75,13 @@ data class ScreenChrome(
         /** A bar has to be flush with the bottom: within this much of it. */
         private const val BOTTOM_ZONE = 0.08
 
-        /** How tall a bar may be, as a fraction of the screen. */
-        private const val MIN_BAR = 0.025
+        /**
+         * How tall a bar may be, as a fraction of the screen. The floor is not as low as
+         * it could be: every bar measured off a device is at least 5% of the screen, and
+         * anything thinner is a divider or a caption row, which must not be allowed to
+         * stand in for a bar in [fallbackFloor].
+         */
+        private const val MIN_BAR = 0.04
         private const val MAX_BAR = 0.12
 
         /** How wide it has to be, as a fraction of the screen. */
@@ -108,6 +117,7 @@ data class ScreenChrome(
             val byIdNav = byId(root, navBarId)
             val foundNav = findNavBar(root, screen)
             return ScreenChrome(
+                fallbackFloor = fallbackFloor(root, screen),
                 screen = screen,
                 // The top bar is recognised by id or not at all; see the file comment.
                 topBar = byId(root, topBarId),
@@ -119,6 +129,31 @@ data class ScreenChrome(
                     else -> byIdNav ?: foundNav
                 },
             )
+        }
+
+        /**
+         * What to do when neither the id nor the shape found a bar.
+         *
+         * Two very different situations look the same from here. Either there is no bar
+         * on this screen — YouTube hides its own the moment you scroll, and then the feed
+         * really does run to the bottom of the display — or there is one and it was not
+         * recognised, which is the failure this file exists to prevent.
+         *
+         * They can be told apart without recognising the bar itself: is there *anything*
+         * down there shaped like one? A full-width strip of the right height, whatever it
+         * holds. If there is, stay off the bottom [NO_NAV_MARGIN] of the screen and accept
+         * covering a little less than we could. If there is nothing of the sort, the space
+         * is content and covering it is right — which is the difference between hiding a
+         * Shorts shelf and hiding all but the last inch of one.
+         */
+        private fun fallbackFloor(root: UiNode, screen: Bounds): Int {
+            if (screen.isEmpty) return screen.bottom
+            val minBottom = screen.bottom - (screen.height * BOTTOM_ZONE).toInt()
+            val barLike = root.walk().any {
+                it.bounds.bottom >= minBottom && isBarShaped(it.bounds, screen)
+            }
+            return if (barLike) screen.bottom - (screen.height * NO_NAV_MARGIN).toInt()
+            else screen.bottom
         }
 
         private fun byId(root: UiNode, id: String?): Bounds? =

@@ -110,8 +110,12 @@ the navigation bar.
 2. **By shape** — a strip flush with the bottom of the screen, full width, a few percent
    of its height, holding three to six *equally sized* controls side by side. That is
    what a navigation bar is, and no app update changes it.
-3. **By giving up safely.** Found neither way, the bottom 9% of the screen is left alone
-   regardless.
+3. **By giving up carefully.** Found neither way, the question becomes whether there is
+   *anything* down there shaped like a bar — a full-width strip of about the right height,
+   whatever it holds. If there is, the bottom 9% is left alone. If there is nothing of the
+   sort, the bar is genuinely gone (YouTube hides its own the moment you scroll) and the
+   feed runs to the bottom of the display. Without that second half, a Shorts shelf was
+   covered to within an inch of the bottom and its channel names showed under the cover.
 
 The equal-width test is not decoration. Instagram's like/comment/share row also sits
 flush above the tab bar, is also full width, is also 76px tall and also holds a row of

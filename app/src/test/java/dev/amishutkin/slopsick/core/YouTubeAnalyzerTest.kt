@@ -157,11 +157,23 @@ class YouTubeShelfShapeTest {
 
     @Test
     fun `no capture is ever painted over YouTube's own navigation`() {
+        // Only where the bar is actually on screen. YouTube hides it as soon as you
+        // scroll, and then the bottom of the display is feed and covering it is right.
         for (name in XmlUiNode.fixtures().map { it.name }.filter { it.startsWith("yt") }) {
-            val scan = YouTubeAnalyzer.analyze(XmlUiNode.fixture(name))
-            for (band in scan.blackouts) {
-                assertTrue("$name: $band runs into the tab bar", band.bottom <= 2211)
+            val root = XmlUiNode.fixture(name)
+            val bar = root.findById("pivot_bar")?.bounds?.takeIf { !it.isEmpty } ?: continue
+            for (band in YouTubeAnalyzer.analyze(root).blackouts) {
+                assertTrue("$name: $band runs into the tab bar $bar", band.bottom <= bar.top)
             }
         }
+    }
+
+    @Test
+    fun `with the bar hidden the shelf is covered all the way down`() {
+        // ytscroll-02 was captured mid-scroll, with the navigation bar hidden. The
+        // conservative floor used to stop the cover an inch short and leave a strip of
+        // Shorts — their channel names and view counts — showing under it.
+        val scan = YouTubeAnalyzer.analyze(XmlUiNode.fixture("ytscroll-02.xml"))
+        assertTrue("the shelf should reach the bottom", scan.blackouts.single().bottom >= 2337)
     }
 }
