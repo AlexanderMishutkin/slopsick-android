@@ -46,6 +46,10 @@ object InstagramAnalyzer {
 
     fun analyze(root: UiNode, settings: Settings = Settings()): FeedScan {
         if (!settings.instagram) return FeedScan.none(TargetApp.INSTAGRAM)
+        // Everything this analyzer returns is clamped to the region between Instagram's
+        // own bars, so that no failure to recognise a screen can end with the tab bar
+        // painted out and no way back to the feed.
+        val chrome = ScreenChrome.of(root, topBarId = ACTION_BAR, navBarId = TAB_BAR)
         // The Reels tab is dealt with on every Instagram screen, not just the feed:
         // Instagram opens straight into Reels often enough that only covering the button
         // when a feed happens to be on screen would miss the case that matters.
@@ -56,8 +60,10 @@ object InstagramAnalyzer {
         }
 
         if (settings.hideReels) {
-            val reels = root.findById(REELS_VIEWER)?.bounds
-            if (reels != null && !reels.isEmpty) {
+            // The player runs edge to edge, under the tab bar included. Covering it as
+            // reported would hide the only way out of Reels.
+            val reels = root.findById(REELS_VIEWER)?.bounds?.let { chrome.clamp(it) }
+            if (reels != null) {
                 return FeedScan(
                     app = TargetApp.INSTAGRAM,
                     feedBounds = null,
@@ -65,6 +71,7 @@ object InstagramAnalyzer {
                     surface = Surface.REELS,
                     blackouts = listOf(reels),
                     blockers = blockers,
+                    safe = chrome.safe,
                 )
             }
         }
@@ -73,7 +80,7 @@ object InstagramAnalyzer {
         // stays — searching is a thing you chose to do — and so does the tab bar.
         val exploreBar = root.findById(EXPLORE_BAR)
         if (settings.hideExplore && exploreBar != null) {
-            val region = exploreRegion(root, exploreBar)
+            val region = exploreRegion(root, exploreBar, chrome)
             if (region != null) {
                 return FeedScan(
                     app = TargetApp.INSTAGRAM,
@@ -82,13 +89,14 @@ object InstagramAnalyzer {
                     surface = Surface.EXPLORE,
                     blackouts = listOf(region),
                     blockers = blockers,
+                    safe = chrome.safe,
                 )
             }
         }
 
         val list = findFeedList(root)
             ?: return FeedScan.none(TargetApp.INSTAGRAM).copy(blockers = blockers)
-        val content = contentRegion(root, list)
+        val content = contentRegion(list, chrome)
         if (content.isEmpty) {
             return FeedScan.none(TargetApp.INSTAGRAM).copy(blockers = blockers)
         }
@@ -135,6 +143,7 @@ object InstagramAnalyzer {
             items = items.mapNotNull { it.clipTo(content) },
             surface = Surface.FEED,
             blockers = blockers,
+            safe = chrome.safe,
         )
     }
 
@@ -172,11 +181,15 @@ object InstagramAnalyzer {
     }
 
     /** Everything between the search bar and the tab bar. */
-    private fun exploreRegion(root: UiNode, bar: UiNode): Bounds? {
+    private fun exploreRegion(root: UiNode, bar: UiNode, chrome: ScreenChrome): Bounds? {
         val grid = root.findById(EXPLORE_GRID) ?: return null
-        val bottom = root.findById(TAB_BAR)?.bounds?.top ?: grid.bounds.bottom
-        val region = Bounds(grid.bounds.left, bar.bounds.bottom, grid.bounds.right, bottom)
-        return region.takeIf { !it.isEmpty }
+        val region = Bounds(
+            grid.bounds.left,
+            bar.bounds.bottom,
+            grid.bounds.right,
+            grid.bounds.bottom,
+        )
+        return chrome.clamp(region)
     }
 
     private fun findFeedList(root: UiNode): UiNode? =
@@ -188,17 +201,17 @@ object InstagramAnalyzer {
      * The feed list sits *behind* the floating toolbar and above the tab bar, so its own
      * bounds are not safe to draw over — covering them would black out Instagram's own
      * chrome and leave the user unable to navigate.
+     *
+     * Instagram hides the toolbar as soon as you scroll, so on most frames there is no
+     * top bar to sit under and the feed's own top is the right ceiling. The floor is
+     * never the feed's own bottom: see [ScreenChrome].
      */
-    private fun contentRegion(root: UiNode, list: UiNode): Bounds {
-        val top = root.findById(ACTION_BAR)?.bounds?.bottom ?: list.bounds.top
-        val bottom = root.findById(TAB_BAR)?.bounds?.top ?: list.bounds.bottom
-        return Bounds(
-            left = list.bounds.left,
-            top = maxOf(list.bounds.top, top),
-            right = list.bounds.right,
-            bottom = minOf(list.bounds.bottom, bottom),
-        )
-    }
+    private fun contentRegion(list: UiNode, chrome: ScreenChrome): Bounds = Bounds(
+        left = list.bounds.left,
+        top = maxOf(list.bounds.top, chrome.ceiling),
+        right = list.bounds.right,
+        bottom = minOf(list.bounds.bottom, chrome.floor),
+    )
 }
 
 /** Trims an item to the drawable feed region, or drops it when nothing is left. */

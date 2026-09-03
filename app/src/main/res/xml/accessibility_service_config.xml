@@ -1,11 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  android:packageNames is the privacy claim this app makes: the system delivers events
+  from these four apps and no others, so the service is blind to the rest of the phone
+  whatever its code says.
+
+  android:canTakeScreenshot is the one capability here beyond reading those windows. It
+  exists for the bug-report button and is used in exactly one file, BugReporter.kt: the
+  overlay is taken down, one PNG is written into the app's own folder, and the overlay
+  goes back up. There is no INTERNET permission, so nothing captured can leave the phone.
+
+  flagRetrieveInteractiveWindows is deliberately absent: it exists to enable getWindows(),
+  which this service never calls — it reads rootInActiveWindow and nothing else — and
+  asking for it makes the system track every window on the device on our behalf.
+
+  android:notificationTimeout is 0 on purpose. At 100 the system drops events of the same
+  type inside that window, and the dropped one is often the last — which showed up as a
+  feed sitting uncovered until something else moved on screen.
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
     android:description="@string/service_description"
-    android:notificationTimeout="100"
+    android:notificationTimeout="0"
     android:summary="@string/service_summary"
     android:settingsActivity="dev.amishutkin.slopsick.ui.MainActivity"
     android:packageNames="com.instagram.android,com.linkedin.android,com.google.android.youtube,com.android.chrome" />

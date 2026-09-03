@@ -108,6 +108,15 @@ data class FeedScan(
      * swallows the touch.
      */
     val blockers: List<Bounds> = emptyList(),
+    /**
+     * The region between the app's own bars — everything that may be painted on this
+     * screen. Null when the analyzer had no opinion about the screen at all.
+     *
+     * Carried on the scan because the overlay is repainted between scans, while the feed
+     * is moving, from nothing but the last scan and how far it has scrolled since. That
+     * projection has to know where the navigation bar is without re-reading the tree.
+     */
+    val safe: Bounds? = null,
 ) {
     val hasFeed: Boolean get() = feedBounds != null && !feedBounds.isEmpty
 
@@ -159,6 +168,17 @@ data class Settings(
     val hideExplore: Boolean = true,
     /** Hide the interstitial cards LinkedIn injects ("People you may know", job prompts). */
     val hideFeedModules: Boolean = true,
+
+    /**
+     * Put a report button on every covered region.
+     *
+     * Everything this tool gets wrong, it gets wrong about a particular screen on a
+     * particular build of a particular app, and none of that survives being described
+     * from memory. The button writes the tree, the verdicts and a screenshot to a folder
+     * on the device — see `BugReporter`. It stays off the lock's list below on purpose:
+     * turning reporting off does not uncover anything.
+     */
+    val reportButtons: Boolean = true,
 
     /**
      * Wall-clock time until which the switches cannot be turned down, as

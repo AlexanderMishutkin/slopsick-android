@@ -69,11 +69,22 @@ class OverlayController(private val context: Context) {
         const val INSTAGRAM_BAR_DARK = 0xFF0C1014.toInt()
         const val YOUTUBE_DARK = 0xFF0F0F0F.toInt()
         const val YOUTUBE_LIGHT = 0xFFFFFFFF.toInt()
+
+        /** Report button size and how far it is inset into its region, in dp. */
+        const val REPORT_SIZE = 40f
+        const val REPORT_INSET = 8f
+
+        /** Regions shorter than this get no button; there is nowhere to put it. */
+        const val MIN_REPORTABLE = 56f
     }
 
     private val windows = context.getSystemService(WindowManager::class.java)
     private var view: CoverView? = null
     private var blockerViews = mutableListOf<Pair<Bounds, View>>()
+    private var reportViews = mutableListOf<Pair<Bounds, ReportView>>()
+
+    /** Called with the covered region whose report button was tapped. */
+    var onReport: ((Bounds) -> Unit)? = null
 
     fun show(
         app: TargetApp?,
@@ -91,7 +102,59 @@ class OverlayController(private val context: Context) {
         view = null
         for ((_, blocker) in blockerViews) runCatching { windows.removeView(blocker) }
         blockerViews.clear()
+        setReports(emptyList())
     }
+
+    /**
+     * Everything drawn, made invisible for a moment.
+     *
+     * A screenshot taken for a bug report has to show what is *underneath* the cover —
+     * a picture of our own rectangles would say nothing that report.json does not
+     * already say. The windows stay in place, so nothing has to be rebuilt afterwards.
+     */
+    fun setPainting(on: Boolean) {
+        val visibility = if (on) View.VISIBLE else View.INVISIBLE
+        view?.visibility = visibility
+        for ((_, blocker) in blockerViews) blocker.visibility = visibility
+        for ((_, button) in reportViews) button.visibility = visibility
+    }
+
+    /**
+     * Puts a report button on each covered region, or takes them all away.
+     *
+     * The windows are reused rather than rebuilt: these move on every scan, and adding
+     * and removing a handful of windows several times a second is exactly the kind of
+     * work that made scrolling feel slow in the first place.
+     */
+    fun setReports(regions: List<Bounds>) {
+        val wanted = regions.filter { it.height >= dp(MIN_REPORTABLE) }
+        while (reportViews.size > wanted.size) {
+            val (_, button) = reportViews.removeAt(reportViews.size - 1)
+            runCatching { windows.removeView(button) }
+        }
+        for ((index, region) in wanted.withIndex()) {
+            val params = reportParams(region)
+            if (index < reportViews.size) {
+                val (previous, button) = reportViews[index]
+                button.region = region
+                if (previous != region) {
+                    runCatching { windows.updateViewLayout(button, params) }
+                    reportViews[index] = region to button
+                }
+            } else {
+                val button = ReportView(context).apply {
+                    this.region = region
+                    setOnClick { tapped -> onReport?.invoke(tapped) }
+                }
+                val added = runCatching { windows.addView(button, params) }
+                if (added.isSuccess) reportViews += region to button
+            }
+        }
+    }
+
+    private fun dp(value: Float) = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, value, context.resources.displayMetrics,
+    ).toInt()
 
     private fun showCovers(color: Int, covers: List<Bounds>, details: List<FeedItem>) {
         if (covers.isEmpty()) {
@@ -168,6 +231,26 @@ class OverlayController(private val context: Context) {
         width = WindowManager.LayoutParams.MATCH_PARENT
         height = WindowManager.LayoutParams.MATCH_PARENT
         gravity = Gravity.TOP or Gravity.START
+    }
+
+    /**
+     * A report button, tucked into the top-right corner of the region it belongs to.
+     * Touchable, like a blocker and unlike the cover: the whole point is to be tappable.
+     */
+    @SuppressLint("WrongConstant")
+    private fun reportParams(region: Bounds) = WindowManager.LayoutParams().apply {
+        val size = dp(REPORT_SIZE)
+        val inset = dp(REPORT_INSET)
+        type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        format = PixelFormat.TRANSLUCENT
+        flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        gravity = Gravity.TOP or Gravity.START
+        x = (region.right - size - inset).coerceAtLeast(region.left)
+        y = (region.top + inset).coerceAtMost(region.bottom - size)
+        width = size
+        height = size
     }
 
     @SuppressLint("WrongConstant")
@@ -332,5 +415,72 @@ class OverlayController(private val context: Context) {
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean = true
+    }
+
+    /**
+     * The button on a cover that says "this one is wrong".
+     *
+     * Deliberately quiet: a translucent chip with a pointing finger on it. It has to be
+     * findable when you want it and ignorable the rest of the time, because it sits on
+     * every covered post.
+     */
+    @SuppressLint("ViewConstructor")
+    private class ReportView(context: Context) : View(context) {
+
+        var region: Bounds = Bounds.EMPTY
+        private var onClick: ((Bounds) -> Unit)? = null
+        private var pressed = false
+
+        private val chip = Paint().apply {
+            isAntiAlias = true
+            color = 0x66000000
+        }
+        private val glyph = Paint().apply {
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+            color = 0xFFEDEDED.toInt()
+        }
+
+        fun setOnClick(listener: (Bounds) -> Unit) {
+            onClick = listener
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val size = width.toFloat()
+            glyph.textSize = size * 0.5f
+            chip.color = if (pressed) 0xAA2E7D32.toInt() else 0x66000000
+            val radius = size * 0.28f
+            canvas.drawRoundRect(RectF(0f, 0f, size, height.toFloat()), radius, radius, chip)
+            canvas.drawText(
+                GLYPH,
+                size / 2f,
+                height / 2f + glyph.textSize / 3f,
+                glyph,
+            )
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    pressed = true
+                    invalidate()
+                }
+                MotionEvent.ACTION_UP -> {
+                    pressed = false
+                    invalidate()
+                    onClick?.invoke(region)
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    pressed = false
+                    invalidate()
+                }
+            }
+            return true
+        }
+
+        private companion object {
+            const val GLYPH = "\uD83D\uDC47"
+        }
     }
 }

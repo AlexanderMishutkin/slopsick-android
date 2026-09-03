@@ -78,7 +78,8 @@ object LinkedInAnalyzer {
 
         val column = root.walk().firstOrNull { it.viewId?.endsWith(LAZY_COLUMN) == true }
             ?: return FeedScan.none(TargetApp.LINKEDIN)
-        val content = contentRegion(root, column, feedTab)
+        val chrome = ScreenChrome.of(root, topBarId = TOP_BAR, navBarId = BOTTOM_BAR)
+        val content = contentRegion(column, feedTab, chrome)
         if (content.isEmpty) return FeedScan.none(TargetApp.LINKEDIN)
 
         val items = column.children
@@ -86,7 +87,7 @@ object LinkedInAnalyzer {
             .map { classify(it, settings) }
             .mapNotNull { it.clipTo(content) }
 
-        return FeedScan(TargetApp.LINKEDIN, content, items)
+        return FeedScan(TargetApp.LINKEDIN, content, items, safe = chrome.safe)
     }
 
     private fun classify(item: UiNode, settings: Settings): FeedItem {
@@ -160,20 +161,17 @@ object LinkedInAnalyzer {
         labels.firstOrNull { it.contains("\u2022") && !it.startsWith("\u2022") }
             ?.substringBefore("\u2022")?.trim()?.takeIf { it.isNotEmpty() }
 
-    private fun contentRegion(root: UiNode, column: UiNode, feedTab: UiNode): Bounds {
-        val top = root.findById(TOP_BAR)?.bounds?.bottom ?: column.bounds.top
-        // LinkedIn collapses its top bar on scroll, and then the lazy column reports the
-        // whole screen — including the navigation. The feed tab is always on screen here,
-        // by the time this runs, so its top is a floor the column's own bounds are not.
-        val bottom = minOf(
-            root.findById(BOTTOM_BAR)?.bounds?.top ?: column.bounds.bottom,
-            feedTab.bounds.top,
-        )
-        return Bounds(
+    /**
+     * LinkedIn collapses its top bar on scroll, and then the lazy column reports the
+     * whole screen — the navigation included. Three separate floors are taken and the
+     * highest wins: the bar found by id or by shape ([ScreenChrome]), the feed tab
+     * itself, which is on screen whenever this runs, and the column's own bottom.
+     */
+    private fun contentRegion(column: UiNode, feedTab: UiNode, chrome: ScreenChrome): Bounds =
+        Bounds(
             left = column.bounds.left,
-            top = maxOf(column.bounds.top, top),
+            top = maxOf(column.bounds.top, chrome.ceiling),
             right = column.bounds.right,
-            bottom = minOf(column.bounds.bottom, bottom),
+            bottom = minOf(minOf(column.bounds.bottom, chrome.floor), feedTab.bounds.top),
         )
-    }
 }

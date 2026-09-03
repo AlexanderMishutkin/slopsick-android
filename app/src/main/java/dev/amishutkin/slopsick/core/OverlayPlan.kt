@@ -25,21 +25,35 @@ object OverlayPlan {
     /** How much a band grows while the page is moving, as a fraction of its height. */
     private const val SCROLL_MARGIN = 0.25
 
+    /**
+     * How much of the distance scrolled since the last scan is given up as margin around
+     * a projected hole. A tenth of it absorbs the rounding and the frame the overlay is
+     * behind by, without eating the post it is protecting.
+     */
+    private const val DRIFT_MARGIN = 0.1
+
+    /** Past this much scrolling since the last scan, projection stops being evidence. */
+    private const val MAX_DRIFT = 2.0
+
+    /** A hole worn thinner than this by margins is not worth keeping open. */
+    private const val MIN_HOLE = 64
+
     /** Regions to paint over. They do not intercept touches. */
     fun cover(scan: FeedScan): List<Bounds> =
-        scan.blackouts.filterNot { it.isEmpty } + feedBands(scan)
+        scan.blackouts.filterNot { it.isEmpty } + feedBands(scan.feedBounds, keptIn(scan))
+
+    private fun keptIn(scan: FeedScan): List<Bounds> =
+        scan.items.filter { it.verdict == Verdict.KEEP }.map { it.bounds }
 
     /**
      * The feed, minus the posts that earned a hole. A blackout region is not a feed of
      * things you chose, so it never gets one.
      */
-    private fun feedBands(scan: FeedScan): List<Bounds> {
-        val feed = scan.feedBounds ?: return emptyList()
-        if (feed.isEmpty) return emptyList()
+    private fun feedBands(feed: Bounds?, kept: List<Bounds>): List<Bounds> {
+        if (feed == null || feed.isEmpty) return emptyList()
 
-        val holes = scan.items
-            .filter { it.verdict == Verdict.KEEP }
-            .map { it.bounds.top.coerceAtLeast(feed.top) to it.bounds.bottom.coerceAtMost(feed.bottom) }
+        val holes = kept
+            .map { it.top.coerceAtLeast(feed.top) to it.bottom.coerceAtMost(feed.bottom) }
             .filter { (top, bottom) -> bottom - top >= MIN_BAND }
             .sortedBy { it.first }
 
@@ -91,6 +105,51 @@ object OverlayPlan {
             if (limit != null) minOf(bottom, limit.bottom) else bottom,
         )
     }
+
+    /**
+     * Where the cover should be *right now*, given the last scan and how far the feed has
+     * scrolled since it was taken — without reading the tree again.
+     *
+     * This is what makes scrolling feel immediate. Reading an accessibility tree costs
+     * tens of milliseconds and cannot be done per frame, so between scans the overlay
+     * used to fall back to covering the entire feed: scroll a pixel and the post you were
+     * reading went black until the next scan caught up. But a scroll event carries the
+     * exact number of pixels the list moved, and moving a rectangle by a known distance
+     * needs no tree at all.
+     *
+     * The holes are shrunk as they move, by [DRIFT_MARGIN] of the distance travelled plus
+     * a fixed pixel or two. The projection is an extrapolation, and an extrapolation that
+     * is a few pixels out should err into the cover rather than into a strip of an
+     * uncovered suggestion. Holes worn down to nothing are dropped.
+     *
+     * Returns null when the projection cannot be trusted — no scan to project from, or so
+     * much scrolling has accumulated since one that the answer is a guess. The caller
+     * then falls back to covering everything, which is always safe.
+     */
+    fun project(scan: FeedScan, dy: Int, drift: Int): List<Bounds>? {
+        val feed = scan.feedBounds
+        if (feed == null && scan.blackouts.isEmpty()) return null
+        val span = feed?.height ?: scan.safe?.height ?: return null
+        if (span <= 0 || drift > span * MAX_DRIFT) return null
+
+        val margin = (drift * DRIFT_MARGIN).toInt() + MIN_BAND
+        val holes = keptIn(scan).mapNotNull { hole ->
+            val moved = Bounds(hole.left, hole.top - dy + margin, hole.right, hole.bottom - dy - margin)
+            moved.takeIf { it.height >= MIN_HOLE }
+        }
+        val blackouts = scan.blackouts.mapNotNull { black ->
+            val moved = Bounds(black.left, black.top - dy - margin, black.right, black.bottom - dy + margin)
+            scan.safe?.let { clip(moved, it) } ?: moved
+        }
+        return blackouts.filterNot { it.isEmpty } + feedBands(feed, holes)
+    }
+
+    private fun clip(bounds: Bounds, region: Bounds): Bounds = Bounds(
+        maxOf(bounds.left, region.left),
+        maxOf(bounds.top, region.top),
+        minOf(bounds.right, region.right),
+        minOf(bounds.bottom, region.bottom),
+    )
 
     /** Regions to paint over *and* keep from being tapped. */
     fun block(scan: FeedScan): List<Bounds> = scan.blockers.filterNot { it.isEmpty }

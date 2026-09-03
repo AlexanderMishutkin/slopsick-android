@@ -47,6 +47,13 @@
     <string name="hidden_shorts">Shorts hidden</string>
     <string name="hidden_generic">Hidden</string>
 
+    <string name="section_reports">Bug reports</string>
+    <string name="opt_reports">Report button on every cover</string>
+    <string name="reports_hint">Tap the 👇 on a cover when it gets something wrong. SLOPSICK writes the screen layout, what it made of it, and a screenshot taken with the cover down.</string>
+    <string name="reports_privacy">Those files contain the posts that were on screen. They are written to this app\'s own folder on the phone and go nowhere else — there is no internet permission. Collect them over USB:\n\nadb pull /sdcard/Android/data/dev.amishutkin.slopsick/files/reports</string>
+    <string name="report_saved">Report saved: %1$s</string>
+    <string name="report_failed">Could not write the report</string>
+
     <string name="section_privacy">Privacy</string>
-    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram, LinkedIn and YouTube — the system enforces that list. Nothing is stored except the switches above.</string>
+    <string name="privacy_body">This app has no internet permission, so it cannot send anything anywhere. It only receives screen content from Instagram, LinkedIn and YouTube — the system enforces that list. Nothing is stored except the switches above and any bug reports you write yourself.</string>
 </resources>

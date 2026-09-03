@@ -28,6 +28,7 @@ class SettingsStore(context: Context) {
         hideShorts = prefs.getBoolean(HIDE_SHORTS, true),
         hideExplore = prefs.getBoolean(HIDE_EXPLORE, true),
         hideFeedModules = prefs.getBoolean(HIDE_MODULES, true),
+        reportButtons = prefs.getBoolean(REPORT_BUTTONS, true),
     )
 
     fun save(settings: Settings) {
@@ -44,6 +45,7 @@ class SettingsStore(context: Context) {
             .putBoolean(HIDE_SHORTS, settings.hideShorts)
             .putBoolean(HIDE_EXPLORE, settings.hideExplore)
             .putBoolean(HIDE_MODULES, settings.hideFeedModules)
+            .putBoolean(REPORT_BUTTONS, settings.reportButtons)
             .apply()
     }
 
@@ -71,5 +73,6 @@ class SettingsStore(context: Context) {
         const val HIDE_SHORTS = "hide_shorts"
         const val HIDE_EXPLORE = "hide_explore"
         const val HIDE_MODULES = "hide_feed_modules"
+        const val REPORT_BUTTONS = "report_buttons"
     }
 }

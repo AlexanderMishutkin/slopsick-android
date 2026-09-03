@@ -61,6 +61,9 @@ class MainActivity : Activity() {
             sw(R.id.optInstagram) { s, v -> s.copy(instagram = v) },
             sw(R.id.optLinkedIn) { s, v -> s.copy(linkedIn = v) },
             sw(R.id.optYouTube) { s, v -> s.copy(youtube = v) },
+            // Not one of the three, and deliberately not covered by the lock: turning
+            // reporting off uncovers nothing.
+            sw(R.id.optReports) { s, v -> s.copy(reportButtons = v) },
         )
 
         setUpLock()
@@ -111,8 +114,11 @@ class MainActivity : Activity() {
             toggle.setOnCheckedChangeListener(null)
             toggle.isChecked = apply(settings, true) == settings
             // While locked, a switch that is on cannot be turned off — but one that is
-            // off can still be turned on. The only thing being prevented is backing out.
-            toggle.isEnabled = !locked || !toggle.isChecked
+            // off can still be turned on. The only thing being prevented is backing out,
+            // so a switch that covers nothing (the report button) stays live throughout:
+            // the lock asks the settings themselves whether turning this off would
+            // uncover anything.
+            toggle.isEnabled = !locked || !settings.loosenedBy(apply(settings, false))
             toggle.setOnCheckedChangeListener(onToggle(apply))
         }
         showLock()

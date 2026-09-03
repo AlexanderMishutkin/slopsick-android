@@ -13,6 +13,21 @@
       may create without SYSTEM_ALERT_WINDOW ("draw over other apps").
     -->
 
+    <!--
+      Not a permission: this declares which packages this app can *see* the existence of,
+      which Android 11 and later otherwise hide. It is the four apps the accessibility
+      service already receives events from, named one by one rather than with
+      QUERY_ALL_PACKAGES, and it is here for one reason — a bug report is close to
+      useless without the version of the app it came from. Every problem reported so far
+      has turned out to be a difference between two builds of the same app.
+    -->
+    <queries>
+        <package android:name="com.instagram.android" />
+        <package android:name="com.linkedin.android" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.android.chrome" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

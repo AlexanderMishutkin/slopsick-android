@@ -2,60 +2,111 @@ package dev.amishutkin.slopsick.platform
 
 import android.accessibilityservice.AccessibilityService
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Handler
-import android.os.SystemClock
+import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
+import dev.amishutkin.slopsick.R
 import dev.amishutkin.slopsick.core.Bounds
+import dev.amishutkin.slopsick.core.ChromeAnalyzer
 import dev.amishutkin.slopsick.core.FeedLedger
+import dev.amishutkin.slopsick.core.FeedScan
 import dev.amishutkin.slopsick.core.InstagramAnalyzer
 import dev.amishutkin.slopsick.core.LinkedInAnalyzer
 import dev.amishutkin.slopsick.core.OverlayPlan
 import dev.amishutkin.slopsick.core.Settings
 import dev.amishutkin.slopsick.core.Surface
 import dev.amishutkin.slopsick.core.TargetApp
-import dev.amishutkin.slopsick.core.ChromeAnalyzer
+import dev.amishutkin.slopsick.core.UiNode
 import dev.amishutkin.slopsick.core.YouTubeAnalyzer
+import kotlin.math.abs
 
 /**
- * Watches the three apps named in `accessibility_service_config.xml` and keeps the
+ * Watches the four apps named in `accessibility_service_config.xml` and keeps the
  * overlay in step with what is on screen.
  *
- * The system only ever delivers events for those three packages, so this service cannot
- * see the rest of the device even if it tried to.
+ * The system only ever delivers events for those packages, so this service cannot see
+ * the rest of the device even if it tried to.
+ *
+ * ## Where the time goes
+ *
+ * Reading an accessibility tree is a synchronous round trip into another process, and on
+ * a loaded feed it costs tens of milliseconds — far too much to do once per frame while
+ * a fling is in flight. The first version dealt with that by covering the whole feed the
+ * moment anything scrolled and waiting for the next scan to cut the holes back, which is
+ * why scrolling felt like it did: the post you were reading went black, and stayed black
+ * for the best part of a second after you stopped.
+ *
+ * Three things fix it, and none of them is "scan more often":
+ *
+ *  1. **Scans happen on a worker thread.** The main thread does nothing but paint, so a
+ *     scroll event is never queued behind a tree read.
+ *  2. **Between scans the cover is projected, not guessed.** A scroll event carries the
+ *     exact number of pixels the list moved, so the last scan's holes can be moved with
+ *     it — see [OverlayPlan.project]. Covering everything is now only the fallback for
+ *     when that distance is unknown or has accumulated past being trustworthy.
+ *  3. **Stopping is what triggers a scan.** Events are not debounced on a fixed timer;
+ *     the scan is scheduled for [QUIET_MS] after the last one and re-armed each time
+ *     another arrives, so it lands as soon as the feed stops moving rather than at the
+ *     end of a fixed wait. A long drag would starve it, so a scan is forced anyway if
+ *     none has finished for [MAX_STALE_MS].
  */
 class SlopsickAccessibilityService : AccessibilityService() {
 
-    private val handler = Handler(Looper.getMainLooper())
+    private val main = Handler(Looper.getMainLooper())
+
+    /** Tree reads and analysis; never touches a view. */
+    private lateinit var thread: HandlerThread
+    private lateinit var worker: Handler
+
     private lateinit var overlay: OverlayController
     private lateinit var store: SettingsStore
+    private lateinit var reporter: BugReporter
 
+    @Volatile
     private var settings: Settings = Settings()
     private var settingsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private var ledger = FeedLedger()
     private var currentApp: TargetApp? = null
 
-    /** The feed region from the last successful scan, used to cover instantly on scroll. */
-    private var lastFeedBounds: Bounds? = null
+    /** The last completed scan, and what it is worth as the feed moves away from it. */
+    private var lastScan: FeedScan? = null
+    private var driftSinceScan = 0
 
-    /** Kept across the scroll fail-safe so the blocker windows are not torn down and
-     *  rebuilt on every scroll event. */
+    /** Kept so the blocker windows are not torn down and rebuilt on every scroll. */
     private var lastBlockers: List<Bounds> = emptyList()
 
-    /** When the feed last moved, so the labels can wait for it to stop. */
-    private var lastScrollAt: Long = 0L
+    /** When the feed last moved, and when a scan last finished. */
+    private var lastScrollAt = 0L
+    private var lastScanAt = 0L
 
     /** The page Chrome last showed in its address bar, while Chrome stays in front. */
     private var chromePage: ChromeAnalyzer.Page = ChromeAnalyzer.Page.OTHER
 
-    private val refresh = Runnable { update() }
+    private var scanning = false
+    private var scanQueued = false
+
+    /** Retries after entering an app, while the feed is still being built. */
+    private var settleStep = 0
+
+    private val scanTick = Runnable { scan() }
+    private val settleTick = object : Runnable {
+        override fun run() {
+            scan()
+            if (settleStep < SETTLE_LADDER.size) {
+                main.postDelayed(this, SETTLE_LADDER[settleStep++])
+            }
+        }
+    }
 
     /**
-     * Events only arrive for the three packages named in the service config, which is
-     * what keeps this service blind to the rest of the device — but it also means
-     * leaving one of those apps produces no event at all, and without this the cover
-     * would stay on screen over the launcher, over other apps, over its own settings.
+     * Events only arrive for the packages named in the service config, which is what
+     * keeps this service blind to the rest of the device — but it also means leaving one
+     * of those apps produces no event at all, and without this the cover would stay on
+     * screen over the launcher, over other apps, over its own settings.
      *
      * So while anything is being covered, and only then, the foreground package is
      * polled. Nothing but the package name is read.
@@ -75,7 +126,7 @@ class SlopsickAccessibilityService : AccessibilityService() {
                 TargetApp.of(front) != currentApp -> return clear()
                 else -> misses = 0
             }
-            handler.postDelayed(this, if (currentApp == TargetApp.CHROME) CHROME_WATCHDOG_MS else WATCHDOG_MS)
+            main.postDelayed(this, if (currentApp == TargetApp.CHROME) CHROME_WATCHDOG_MS else WATCHDOG_MS)
         }
     }
 
@@ -83,12 +134,16 @@ class SlopsickAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        thread = HandlerThread("slopsick-scan").apply { start() }
+        worker = Handler(thread.looper)
         overlay = OverlayController(this)
         store = SettingsStore(this)
+        reporter = BugReporter(this)
         settings = store.load()
+        overlay.onReport = { region -> report(region) }
         settingsListener = store.observe {
             settings = store.load()
-            handler.post(refresh)
+            main.post { scan() }
         }
     }
 
@@ -98,131 +153,271 @@ class SlopsickAccessibilityService : AccessibilityService() {
             clear()
             return
         }
-        if (app != currentApp) {
-            currentApp = app
-            // A different app is a different feed; nothing remembered about the last one
-            // tells us anything about this one.
-            ledger = FeedLedger()
-            lastFeedBounds = null
-            chromePage = ChromeAnalyzer.Page.OTHER
-            overlay.hide()
+        if (app != currentApp) return enter(app)
+
+        val now = SystemClock.uptimeMillis()
+        val scrolled = event?.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED
+        if (scrolled) {
+            lastScrollAt = now
+            paintProjected(app, scrollDeltaOf(event))
         }
 
-        // Scrolling invalidates every hole at once: the post that earned one has moved,
-        // and until the next scan says otherwise the honest thing to show is a cover.
-        if (event?.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
-            lastScrollAt = SystemClock.uptimeMillis()
-            lastFeedBounds?.let {
-                overlay.show(app, Surface.FEED, listOf(it), emptyList(), lastBlockers)
-            }
-        }
-
-        handler.removeCallbacks(refresh)
-        handler.postDelayed(refresh, debounceFor(app))
+        main.removeCallbacks(scanTick)
+        main.postDelayed(scanTick, delayFor(app, scrolled, now))
     }
 
     /**
-     * Chrome has to build an accessibility tree for an entire web page on every read, and
-     * asking eight times a second visibly hurts it. The native feeds are cheap by
-     * comparison and want the responsiveness.
+     * When to scan next.
+     *
+     * A scroll is answered as soon as the feed goes quiet, because that is the moment the
+     * projection stops being able to keep up. Everything else is throttled: an autoplaying
+     * video emits content-changed events by the frame, and none of them move a post, so
+     * answering each one is a tree read per frame for no change in what is painted.
      */
-    private fun debounceFor(app: TargetApp) =
-        if (app == TargetApp.CHROME) CHROME_DEBOUNCE_MS else DEBOUNCE_MS
+    private fun delayFor(app: TargetApp, scrolled: Boolean, now: Long): Long {
+        val quiet = quietFor(app)
+        if (scrolled) return if (now - lastScanAt > MAX_STALE_MS) 0L else quiet
+        return maxOf(quiet, MIN_SCAN_GAP_MS - (now - lastScanAt))
+    }
+
+    /** A different app is a different feed; nothing remembered about the last one holds. */
+    private fun enter(app: TargetApp) {
+        currentApp = app
+        ledger = FeedLedger()
+        lastScan = null
+        driftSinceScan = 0
+        chromePage = ChromeAnalyzer.Page.OTHER
+        overlay.hide()
+
+        // A feed is rarely finished rendering when the window-state event arrives, and
+        // once it has settled no further events need come — so an app opened and left
+        // alone would sit there uncovered until something moved. Rather than poll
+        // forever, try a handful of times over the first few seconds and stop.
+        settleStep = 0
+        main.removeCallbacks(settleTick)
+        main.post(settleTick)
+    }
+
+    /**
+     * Repaints from the last scan and the distance scrolled since, without reading the
+     * tree. Falls back to covering the whole feed when the distance is unknown.
+     */
+    private fun paintProjected(app: TargetApp, dy: Int?) {
+        val scan = lastScan ?: return
+        if (dy != null) driftSinceScan += abs(dy)
+        val projected = dy?.let { OverlayPlan.project(scan, it, driftSinceScan) }
+            ?: OverlayPlan.project(scan, 0, Int.MAX_VALUE)
+            ?: scan.safe?.let { listOf(it) }
+            ?: scan.feedBounds?.let { listOf(it) }
+            ?: return
+        overlay.show(app, scan.surface, projected, emptyList(), lastBlockers)
+        // A button anchored to where a band was a frame ago is worse than no button.
+        overlay.setReports(emptyList())
+    }
+
+    /**
+     * How far the list moved, from the event itself. Not every view reports it — Chrome
+     * does not — and a value larger than the screen is a jump rather than a scroll, so
+     * either way the caller is told nothing rather than something wrong.
+     */
+    private fun scrollDeltaOf(event: AccessibilityEvent): Int? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        val dy = event.scrollDeltaY
+        if (dy == 0 || dy == UNSET_DELTA) return null
+        val limit = lastScan?.safe?.height ?: lastScan?.feedBounds?.height ?: return null
+        return dy.takeIf { abs(it) <= limit }
+    }
+
+    /**
+     * How long after the last event to scan. Chrome has to build an accessibility tree
+     * for an entire web page on every read, and asking too often visibly hurts it; the
+     * native feeds are cheap by comparison and want the responsiveness.
+     */
+    private fun quietFor(app: TargetApp) = if (app == TargetApp.CHROME) CHROME_QUIET_MS else QUIET_MS
 
     override fun onInterrupt() = clear()
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         clear()
         settingsListener?.let { store.stopObserving(it) }
+        if (::thread.isInitialized) thread.quitSafely()
         return super.onUnbind(intent)
     }
 
-    private fun update() {
+    // --- scanning ------------------------------------------------------------------
+
+    private class Reading(val root: UiNode?, val front: TargetApp?, val url: String?)
+
+    private fun scan() {
         val app = currentApp ?: return clear()
-        val live = rootInActiveWindow
-        if (live != null && TargetApp.of(live.packageName?.toString()) != app) {
-            // The foreground moved on between the event and this pass.
-            return clear()
+        if (scanning) {
+            scanQueued = true
+            return
         }
+        scanning = true
+        val snapshotSettings = settings
+        val startedAt = SystemClock.uptimeMillis()
+        worker.post {
+            val reading = read(app)
+            main.post { finish(app, reading, snapshotSettings, startedAt) }
+        }
+    }
+
+    /** Runs on the worker: the tree read and nothing that touches a window. */
+    private fun read(app: TargetApp): Reading {
+        val live = rootInActiveWindow
+        val front = TargetApp.of(live?.packageName?.toString())
         val root = SnapshotNode.of(live)
         live?.recycleCompat()
         if (root != null) TreeDebug.dump(root)
-        if (root == null) {
+        val url = if (app == TargetApp.CHROME && root != null) ChromeAnalyzer.url(root) else null
+        return Reading(root, front, url)
+    }
+
+    private fun finish(app: TargetApp, reading: Reading, used: Settings, startedAt: Long) {
+        scanning = false
+        if (currentApp != app) return
+        if (reading.front != null && reading.front != app) return clear()
+
+        if (reading.root == null) {
             // The window can be momentarily unreadable — mid-transition, or while the app
             // is busy. Leaving it here would strand whatever is on screen under the last
-            // set of bands, including the blanket cover a scroll puts up, so try again
-            // shortly rather than settling for a stale overlay.
-            handler.removeCallbacks(refresh)
-            handler.postDelayed(refresh, RETRY_MS)
+            // projection, so try again shortly rather than settling for a stale overlay.
+            main.removeCallbacks(scanTick)
+            main.postDelayed(scanTick, RETRY_MS)
             return
         }
 
+        // Chrome's address bar disappears on scroll, taking the only evidence of which
+        // page this is with it. Remember it for as long as Chrome is in front.
+        reading.url?.let { chromePage = ChromeAnalyzer.pageOf(it) }
+
         val scan = when (app) {
-            TargetApp.INSTAGRAM -> InstagramAnalyzer.analyze(root, settings)
-            TargetApp.LINKEDIN -> LinkedInAnalyzer.analyze(root, settings)
-            TargetApp.YOUTUBE -> YouTubeAnalyzer.analyze(root, settings)
-            TargetApp.CHROME -> {
-                // Chrome's address bar disappears on scroll, taking the only evidence of
-                // which page this is with it. Remember it for as long as Chrome is in
-                // front; leaving Chrome clears it, below.
-                ChromeAnalyzer.url(root)?.let { chromePage = ChromeAnalyzer.pageOf(it) }
-                ChromeAnalyzer.analyze(root, settings, chromePage)
-            }
+            TargetApp.INSTAGRAM -> InstagramAnalyzer.analyze(reading.root, used)
+            TargetApp.LINKEDIN -> LinkedInAnalyzer.analyze(reading.root, used)
+            TargetApp.YOUTUBE -> YouTubeAnalyzer.analyze(reading.root, used)
+            TargetApp.CHROME -> ChromeAnalyzer.analyze(reading.root, used, chromePage)
         }
+
+        lastScanAt = SystemClock.uptimeMillis()
+        lastTree = reading.root
 
         if (scan.isEmpty) {
             // Not a screen this app has an opinion about — a profile, a chat, settings.
-            lastFeedBounds = null
+            lastScan = null
             lastBlockers = emptyList()
             overlay.hide()
             armWatchdog(false)
+            requeue()
             return
         }
 
         // Reels has no posts to weigh, so there is nothing for the ledger to remember and
         // running it would only leave stale verdicts behind for the feed.
         val tracked = if (scan.surface == Surface.FEED) ledger.observe(scan) else scan
-        lastFeedBounds = tracked.feedBounds
+        lastScan = tracked
+        driftSinceScan = 0
+
         val bands = OverlayPlan.cover(tracked)
         val blockers = OverlayPlan.block(tracked)
 
-        // Outlines and labels only once the feed has stopped moving: mid-scroll the bounds
-        // are already stale, and a border in the wrong place is more distracting than a
-        // plain sheet. A scroll therefore schedules one more pass to draw them.
+        // Outlines and labels only once the feed has stopped moving: mid-scroll the
+        // bounds are already a frame behind and a border in the wrong place is more
+        // distracting than a plain sheet.
         val settled = SystemClock.uptimeMillis() - lastScrollAt > SETTLE_MS
         if (!settled) {
-            handler.removeCallbacks(refresh)
-            handler.postDelayed(refresh, SETTLE_MS)
+            main.removeCallbacks(scanTick)
+            main.postDelayed(scanTick, SETTLE_MS)
         }
         val details = if (settled) OverlayPlan.details(tracked) else emptyList()
-        // While the page is moving, the bands are always a frame or two behind where the
-        // content now is, and the gap shows as a sliver of whatever was being covered.
-        // Growing them absorbs the lag; they snap back the moment it settles.
         val painted = if (settled) bands else bands.map { OverlayPlan.grown(it, tracked) }
+
         if (dev.amishutkin.slopsick.BuildConfig.DEBUG) {
             android.util.Log.d(
                 "Slopsick",
                 "$app ${tracked.surface} feed=${tracked.feedBounds} " +
-                    "items=${tracked.items.size} bands=${bands.size} blockers=${blockers.size}",
+                    "items=${tracked.items.size} bands=${bands.size} blockers=${blockers.size} " +
+                    "read=${lastScanAt - startedAt}ms sinceScroll=" +
+                    "${lastScanAt - lastScrollAt}ms settled=$settled",
             )
         }
         lastBlockers = blockers
         overlay.show(app, tracked.surface, painted, details, blockers)
+        overlay.setReports(if (settled && used.reportButtons) bands else emptyList())
         armWatchdog(bands.isNotEmpty() || blockers.isNotEmpty())
+        requeue()
     }
 
+    /**
+     * Events that arrived while a scan was in flight are answered by one more scan —
+     * under the same throttle as any other event, or a busy window would have this
+     * scanning back to back through [scanQueued] and never reach the floor.
+     */
+    private fun requeue() {
+        if (!scanQueued) return
+        scanQueued = false
+        val app = currentApp ?: return
+        main.removeCallbacks(scanTick)
+        main.postDelayed(scanTick, delayFor(app, scrolled = false, now = SystemClock.uptimeMillis()))
+    }
+
+    // --- bug reports ---------------------------------------------------------------
+
+    /** The tree the last scan was made from, for a report to write out. */
+    private var lastTree: UiNode? = null
+
+    /**
+     * Writes a report for the region whose button was tapped.
+     *
+     * The overlay is taken down for the length of the capture, because a screenshot of
+     * our own rectangles would show nothing that report.json does not already say — what
+     * is wanted is the screen underneath. One frame is not enough for the compositor to
+     * catch up, hence the small delay before the shutter and after it.
+     */
+    private fun report(region: Bounds) {
+        val app = currentApp ?: return
+        if (reporting) return
+        reporting = true
+        val tree = lastTree
+        val scan = lastScan
+        val used = settings
+        overlay.setPainting(false)
+        main.postDelayed({
+            reporter.capture(this, app, region, tree, scan, used) { dir ->
+                main.post {
+                    overlay.setPainting(true)
+                    reporting = false
+                    val name = dir?.name
+                    android.widget.Toast.makeText(
+                        this,
+                        if (name != null) getString(R.string.report_saved, name)
+                        else getString(R.string.report_failed),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }, SHUTTER_MS)
+    }
+
+    private var reporting = false
+
+    // --- lifecycle -----------------------------------------------------------------
+
     private fun armWatchdog(active: Boolean) {
-        handler.removeCallbacks(watchdog)
+        main.removeCallbacks(watchdog)
         misses = 0
-        if (active) handler.postDelayed(watchdog, WATCHDOG_MS)
+        if (active) main.postDelayed(watchdog, WATCHDOG_MS)
     }
 
     private fun clear() {
-        handler.removeCallbacks(refresh)
-        handler.removeCallbacks(watchdog)
+        main.removeCallbacks(scanTick)
+        main.removeCallbacks(settleTick)
+        main.removeCallbacks(watchdog)
         misses = 0
         currentApp = null
-        lastFeedBounds = null
+        lastScan = null
+        lastTree = null
+        driftSinceScan = 0
         lastBlockers = emptyList()
         chromePage = ChromeAnalyzer.Page.OTHER
         if (::overlay.isInitialized) overlay.hide()
@@ -230,25 +425,48 @@ class SlopsickAccessibilityService : AccessibilityService() {
 
     private companion object {
         /**
-         * Long enough that a fling does not trigger a scan per frame, short enough that
-         * the feed does not sit under a blanket cover after it settles.
+         * How long the screen has to be still before a scan runs. Short, because it is
+         * re-armed on every event: this is "the moment things stop", not a fixed wait.
          */
-        const val DEBOUNCE_MS = 120L
-        const val CHROME_DEBOUNCE_MS = 350L
+        const val QUIET_MS = 70L
+        const val CHROME_QUIET_MS = 300L
+
+        /** A long slow drag never goes quiet, so scan anyway once a scan is this old. */
+        const val MAX_STALE_MS = 400L
+
+        /**
+         * The fastest anything other than a scroll may cause a scan. A video playing in
+         * the feed changes its window several times a second and moves nothing.
+         */
+        const val MIN_SCAN_GAP_MS = 250L
 
         /** How long to wait before re-reading a window that could not be read. */
-        const val RETRY_MS = 250L
+        const val RETRY_MS = 200L
 
         /** How often to check we are still in the app we are covering. */
         const val WATCHDOG_MS = 400L
 
-        /** Each poll is another full tree read; Chrome cannot afford them as often. */
+        /** Each poll is another root read; Chrome cannot afford them as often. */
         const val CHROME_WATCHDOG_MS = 900L
 
-        /** How long after the last scroll the outlines and labels are drawn. */
-        const val SETTLE_MS = 350L
+        /**
+         * How still the feed has to be before the outlines and labels go on. It only has
+         * to outlast one frame of a fling, and a scan scheduled [QUIET_MS] after the last
+         * scroll normally lands past it already — so the labels appear in the same pass
+         * that cuts the holes, rather than a round trip later.
+         */
+        const val SETTLE_MS = 90L
+
+        /** Rescans after entering an app, while the feed is still being built. */
+        val SETTLE_LADDER = longArrayOf(150L, 350L, 700L, 1200L, 2000L)
 
         /** Unreadable this many times in a row means the app is gone, not just busy. */
         const val MAX_MISSES = 3
+
+        /** What [AccessibilityEvent.getScrollDeltaY] returns when the view did not set it. */
+        const val UNSET_DELTA = -1
+
+        /** How long the overlay stays down before a bug report's screenshot is taken. */
+        const val SHUTTER_MS = 120L
     }
 }

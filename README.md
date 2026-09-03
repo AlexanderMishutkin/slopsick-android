@@ -87,6 +87,42 @@ positives.
   next, so matching the heading alone covers a caption and leaves the Shorts playing
   underneath it. The run is stitched back together into one region.
 
+  A shelf is recognised **by its shape, not by its words**. The first version matched the
+  heading and the `- play Short` suffix in each thumbnail's description; on a phone whose
+  YouTube build writes no such suffix that produced the worst possible result — the word
+  "Shorts" neatly covered, the videos underneath it playing on. The shape is the thing no
+  build changes: *YouTube's feed is one video per row, and Shorts come two or three
+  abreast, in portrait.* A row of tall tiles side by side is a shelf in any locale. The
+  string matches are kept as a second opinion, because the heading row has no tiles in
+  it, but nothing depends on them.
+
+### Never covering the way out
+
+The worst thing this app can do is not cover too much of a feed — it is cover the tab
+bar, because then you cannot leave the app to turn it off. That happened, on a phone
+whose Instagram no longer published the view id the code looked for; the fallback was
+"cover down to the bottom of the scroll container", which on all three apps runs behind
+the navigation bar.
+
+`ScreenChrome.kt` now finds the bar three ways and takes the most cautious answer:
+
+1. **By id**, when the app still publishes one.
+2. **By shape** — a strip flush with the bottom of the screen, full width, a few percent
+   of its height, holding three to six *equally sized* controls side by side. That is
+   what a navigation bar is, and no app update changes it.
+3. **By giving up safely.** Found neither way, the bottom 9% of the screen is left alone
+   regardless.
+
+The equal-width test is not decoration. Instagram's like/comment/share row also sits
+flush above the tab bar, is also full width, is also 76px tall and also holds a row of
+controls — but its buttons are 64 to 183 pixels wide, where a tab bar divides its width
+evenly. That capture is a test.
+
+The same treatment was tried on the *top* bar and withdrawn: Instagram hides its toolbar
+on scroll, and the shape test then matches whatever is pinned to the top of the screen
+instead — in the captures, a post's own like row — which leaves a strip of the post
+showing. The top bar is found by id or not at all.
+
 ### Chrome
 
 instagram.com in the mobile browser — the feed, Explore and Reels. Chrome puts the whole
@@ -146,6 +182,29 @@ post has one, and otherwise by measuring how far the feed moved and asking who o
 that space a moment ago. When the frames do not line up, nothing is inherited and the
 region stays covered.
 
+Reading an accessibility tree is a round trip into another process and costs tens to
+hundreds of milliseconds on a loaded feed — far too much to do per frame. The first
+version handled that by covering the whole feed the moment anything moved and waiting for
+the next scan to cut the holes back, which is what made scrolling feel the way it did:
+the post you were reading went black, and stayed black for the best part of a second
+after you stopped. Three things replaced it, none of them "scan more often":
+
+- **Scans run on a worker thread.** The main thread only paints, so a scroll event is
+  never queued behind a tree read.
+- **Between scans the cover is projected, not guessed.** A scroll event carries the exact
+  number of pixels the list moved, so the last scan's holes move with it — no tree needed.
+  The holes are *shrunk* as they travel, by a tenth of the distance covered: an
+  extrapolation that is a few pixels out should err into the cover, never into a strip of
+  an uncovered suggestion. Past two screens' worth of scrolling since the last scan the
+  projection stops being evidence and the whole feed is covered again.
+- **Stopping is what triggers a scan**, rather than a fixed debounce: the scan is armed
+  for 70ms after the last scroll and re-armed by each new one, so it lands as the feed
+  settles. On the emulator the precise cover appears 20–280ms after the last scroll event,
+  labels included. A long slow drag never goes quiet, so a scan is forced anyway every
+  400ms; and everything that is *not* a scroll is throttled to one scan every 250ms,
+  because a video playing in the feed changes its window several times a second and moves
+  nothing.
+
 ## Privacy
 
 - **No permissions.** Not internet, not storage, nothing. The manifest has no
@@ -158,11 +217,22 @@ region stays covered.
 
   (there is no such section, because there are none)
 
-- **It only sees two apps.** `android:packageNames` in
-  `app/src/main/res/xml/accessibility_service_config.xml` names Instagram and LinkedIn.
-  The system enforces that; it is not a promise made in code.
+- **It only sees four apps.** `android:packageNames` in
+  `app/src/main/res/xml/accessibility_service_config.xml` names Instagram, LinkedIn,
+  YouTube and Chrome. The system enforces that; it is not a promise made in code.
 
-- **Nothing leaves the device and nothing is stored** except the five switches.
+- **One capability beyond reading those windows**: `android:canTakeScreenshot`, added for
+  the bug-report button. It is used in exactly one file, `BugReporter.kt`, only when you
+  tap the button, and what it writes goes into the app's own folder on the phone. With no
+  INTERNET permission it cannot go anywhere else.
+
+- **The manifest has a `<queries>` element**, naming the same four packages. That is not a
+  permission — it declares which packages this app is allowed to *see the existence of*,
+  which Android 11 hides by default — and it is there so a bug report can record which
+  version of the app it came from. `QUERY_ALL_PACKAGES` is deliberately not used.
+
+- **Nothing leaves the device and nothing is stored** except the four switches and any
+  bug reports you write yourself.
 
 - **No dependencies** beyond JUnit for the tests. Every library is one more thing a
   reader has to trust, and the point of this app is that it can be read in an afternoon.
@@ -171,6 +241,42 @@ region stays covered.
 
 If you are reviewing a change to this app, the single thing to refuse is a new
 permission.
+
+## Bug reports
+
+Everything this tool gets wrong, it gets wrong about a particular screen, on a particular
+build of a particular app, in a particular language. None of that survives being described
+from memory, and none of it reproduces on another device. So the cover carries a button.
+
+Tap the 👇 in the corner of a cover when it gets something wrong, and SLOPSICK writes
+three files:
+
+| file | what it is |
+| --- | --- |
+| `tree.xml` | the accessibility tree, in `uiautomator dump` format — the same format the test fixtures are in, so it drops straight into the corpus and becomes a test |
+| `report.json` | what the analyzer made of that tree: every item, its verdict and reason, the regions painted, the app's version, the device |
+| `screen.png` | taken with the overlay down, so it shows what was underneath |
+
+Collect them over USB:
+
+```
+adb pull /sdcard/Android/data/dev.amishutkin.slopsick/files/reports
+```
+
+To turn one into a test, anonymise it and drop it in:
+
+```
+python3 tools/anonymize.py <dir-with-tree.xml> app/src/test/resources/fixtures
+```
+
+**These files contain the posts that were on screen** — names, photographs, text. They
+sit in this app's own directory and go nowhere else; there is no INTERNET permission.
+Nothing is written unless you tap the button, and the button only exists while the
+reporting switch is on. Delete them when you are done:
+
+```
+adb shell rm -rf /sdcard/Android/data/dev.amishutkin.slopsick/files/reports
+```
 
 ## Building
 
@@ -236,8 +342,8 @@ allowed to see sends an event. Turning it off is the accessibility toggle, nothi
 
 ## Tests
 
-97 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
-interface rather than `AccessibilityNodeInfo`, so they can be run against 46 UI trees
+125 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+interface rather than `AccessibilityNodeInfo`, so they can be run against 60 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
 
@@ -274,9 +380,13 @@ adb shell settings put secure enabled_accessibility_services dev.amishutkin.slop
 adb shell settings put secure accessibility_enabled 1
 ```
 
-The most useful tests are the corpus invariants, which hold over all 46 screens rather
+The most useful tests are the corpus invariants, which hold over all 60 screens rather
 than expectations about one of them — in particular that **everything not explicitly
-kept ends up covered**.
+kept ends up covered**, and that **no capture ever has its navigation bar painted over**.
+
+`ytshelf-unlabelled.xml` is worth singling out: a real YouTube capture with the "Shorts"
+heading and every `play Short` suffix deleted, which is the phone that reported the bug,
+reproduced. The shape rule covers the shelf in it; the old word rule covered nothing.
 
 ## What is not done
 
@@ -286,11 +396,17 @@ Being specific, because the gaps matter more than the features:
   8 LinkedIn ones — the recon account was new and had no ad profile. The Instagram ad
   path is a string match written from the docs and has never matched anything real. It
   is the one word-match in `InstagramAnalyzer.kt`, and it is marked as such.
-- **The YouTube Shorts shelf rule is word-based.** YouTube's feed rows carry no view ids
-  at all, so a shelf is a row whose heading is exactly "Shorts", plus the rows under it
-  whose items describe themselves as "... - play Short". Narrow enough not to catch a
-  video titled "I wore Shorts for 30 days", but "play Short" is translated, so in another
-  language only the heading would be covered. Verified against a real shelf on device.
+- **The YouTube Shorts shelf rule is a shape rule, and shapes are not proofs.** Two or
+  three tall tiles side by side is a Shorts shelf everywhere it has been seen, but any
+  other multi-column portrait row in the feed would be covered too. Nothing in the
+  captures is, and the alternative — matching words — is what failed on a real phone.
+- **Instagram's stories row is still left uncovered**, along with Instagram's own toolbar,
+  which together are the top 23% of the screen. That is by choice, not by accident; it is
+  one flag (`hideStoriesTray`) if it should go.
+- **LinkedIn was not re-verified on the emulator** for this round of changes — the
+  session there had expired and logging back in needs credentials this repo does not
+  have. It is covered by 12 captured screens in the corpus, including the invariant that
+  its navigation bar survives.
 - **The stories row is kept on the web**, matching the app, where it is kept by default.
 - **The web feed leaves a thin strip below the site header uncovered** — the region
   starts at the header's reported bottom and the sticky header overlaps a little further.
@@ -299,8 +415,9 @@ Being specific, because the gaps matter more than the features:
   painting over the clock is worse.
 - **Chrome covers instagram.com only.** LinkedIn and YouTube on the mobile web are not
   read.
-- **Only tested on an emulator** (Pixel-shaped AVD, Android 16). Fling behaviour on real
-  hardware is different enough that acceptance belongs on a real phone.
+- **Mostly tested on an emulator** (Pixel-shaped AVD, Android 16) with spot checks on one
+  real phone. The emulator's Instagram and YouTube are a different build from the phone's,
+  which is how the Shorts bug got in.
 - **Only tested on one account's feed**, which follows about ten public accounts.
 - **Not on Google Play.** Play restricts `AccessibilityService` to genuine accessibility
   tools, and this is not one. Distribution is a signed APK, installed by hand.
@@ -319,7 +436,7 @@ app/src/main/java/dev/amishutkin/slopsick/
               that is tested
   platform/   the accessibility service, the overlay window, the settings store
   ui/         one settings screen
-app/src/test/ the tests, and 46 anonymised device captures
+app/src/test/ the tests, and 60 anonymised device captures
 tools/        the anonymiser
 ```
 

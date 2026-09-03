@@ -222,3 +222,55 @@ fun youtubeHome(vararg rows: List<String>): UiNode = FakeNode(
         youtubeNavBar(),
     ),
 )
+
+/**
+ * A row of the home feed built to scale rather than from labels: [columns] portrait
+ * tiles side by side, which is the shape that gives a Shorts shelf away when the
+ * device's YouTube build writes no "play Short" in the descriptions.
+ *
+ * Each tile is a nest of views with much the same bounds, as YouTube builds them.
+ */
+fun youtubeGridRow(top: Int, height: Int = 855, columns: Int = 2, label: String = ""): UiNode {
+    val width = 1080 / columns
+    return FakeNode(
+        bounds = Bounds(0, top, 1080, top + height),
+        children = (0 until columns).map { i ->
+            FakeNode(
+                bounds = Bounds(i * width, top, (i + 1) * width, top + height),
+                children = listOf(
+                    FakeNode(
+                        contentDesc = label.ifEmpty { null },
+                        bounds = Bounds(i * width + 32, top, (i + 1) * width - 9, top + height - 18),
+                        children = listOf(
+                            FakeNode(bounds = Bounds(i * width + 32, top, (i + 1) * width - 9, top + height - 90)),
+                        ),
+                    ),
+                ),
+            )
+        },
+    )
+}
+
+/** An ordinary home-feed row: one landscape thumbnail with a title under it. */
+fun youtubeVideoRow(top: Int, title: String = "An ordinary video"): UiNode = FakeNode(
+    bounds = Bounds(0, top, 1080, top + 800),
+    children = listOf(
+        FakeNode(bounds = Bounds(0, top, 1080, top + 608)),
+        FakeNode(contentDesc = title, bounds = Bounds(159, top + 640, 975, top + 700)),
+        FakeNode(bounds = Bounds(32, top + 630, 127, top + 725)),
+    ),
+)
+
+/** YouTube's home feed, given the rows themselves rather than their labels. */
+fun youtubeFeedOf(vararg rows: UiNode): UiNode = FakeNode(
+    bounds = Bounds(0, 0, 1080, 2400),
+    children = listOf(
+        FakeNode(
+            viewId = "com.google.android.youtube:id/results",
+            className = "androidx.recyclerview.widget.RecyclerView",
+            bounds = Bounds(0, 189, 1080, 2337),
+            children = rows.toList(),
+        ),
+        youtubeNavBar(),
+    ),
+)

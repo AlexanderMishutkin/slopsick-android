@@ -120,6 +120,32 @@
             android:layout_height="wrap_content"
             android:text="@string/lock_honest" />
 
+        <!-- Bug reports -->
+        <TextView
+            style="@style/SectionHeading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/section_reports" />
+
+        <Switch
+            android:id="@+id/optReports"
+            style="@style/Row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/opt_reports" />
+
+        <TextView
+            style="@style/Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/reports_hint" />
+
+        <TextView
+            style="@style/Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/reports_privacy" />
+
         <!-- Privacy -->
         <TextView
             style="@style/SectionHeading"
