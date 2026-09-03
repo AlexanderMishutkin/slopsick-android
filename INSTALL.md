@@ -11,13 +11,13 @@ below is a hand-installed APK.
 **Install with an installer attributed.** Not this:
 
 ```
-adb install SLOPSICK-1.0.0.apk          # don't
+adb install SLOPSICK-1.1.0.apk          # don't
 ```
 
 This:
 
 ```
-adb install -r -i com.android.vending SLOPSICK-1.0.0.apk
+adb install -r -i com.android.vending SLOPSICK-1.1.0.apk
 ```
 
 A plain `adb install` leaves `installerPackageName=null`. Android 13 and later treat an
