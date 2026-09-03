@@ -121,6 +121,28 @@ the navigation bar.
    gone. Without that last distinction a Shorts shelf is covered to within an inch of the
    bottom and its channel names show under the cover.
 
+### The overlay window does not always start where it asked to
+
+The analyzers reason in screen coordinates, because that is what an accessibility tree
+reports. The cover window asks to be laid out from the top-left of the display, and on the
+emulator it gets it — so view coordinates and screen coordinates coincide and nobody
+notices the assumption.
+
+On a Xiaomi running Android 16 they do not coincide. The window begins below the status
+bar, so every band was painted 138 pixels lower than asked: a strip of live feed above the
+cover, and the bottom of the cover pushed down over the app's own tab bar. One offset,
+three separate-looking complaints.
+
+`CoverView` now measures where it actually landed with `getLocationOnScreen` and translates
+the canvas by it, so it draws in screen coordinates whatever the window manager did; the
+blocker and report windows are moved by the same offset. Debug builds print it:
+
+```
+draw 1 bands, view 1080x2400 at 0,0, insets top=63 bottom=63
+```
+
+`at 0,0` is the emulator. `at 0,138` was the phone.
+
 **And none of it is trusted on its own.** The scan carries the bar out to the service,
 which remembers where each app's was and passes it to the overlay as a floor the painter
 will not cross. That last part is not belt and braces for its own sake: the first reports
@@ -434,9 +456,8 @@ Being specific, because the gaps matter more than the features:
 - **LinkedIn cannot be re-verified on the emulator.** That account was restricted after
   being driven with scripted input; see the note in this file's history. It is covered by
   12 captured screens plus the phone reports.
-- **The stories row is covered in the app and kept on the web.** That reads as an
-  inconsistency and was asked for as one: in the app it and the toolbar are the top
-  quarter of the screen and the largest thing on it nobody chose, on the web it is a strip.
+- **The stories row is kept**, in the app and on the web alike: those are people you
+  followed on purpose.
 - **The web feed leaves a thin strip below the site header uncovered** — the region
   starts at the header's reported bottom and the sticky header overlaps a little further.
 - **A strip under the status bar can leak.** When an app draws its content edge to edge,

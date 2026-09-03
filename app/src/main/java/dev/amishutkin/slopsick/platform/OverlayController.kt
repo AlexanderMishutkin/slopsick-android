@@ -83,6 +83,21 @@ class OverlayController(private val context: Context) {
     private var blockerViews = mutableListOf<Pair<Bounds, View>>()
     private var reportViews = mutableListOf<Pair<Bounds, ReportView>>()
 
+    /**
+     * Where the overlay window's own (0,0) sits on the display.
+     *
+     * Everything this class is handed is in screen coordinates, because that is what an
+     * accessibility tree reports. A full-screen window laid out with FLAG_LAYOUT_IN_SCREEN
+     * is *supposed* to start at the top-left of the display, and on the emulator it does.
+     * On a Xiaomi running Android 16 it does not: the window begins below the status bar,
+     * so a band asked for at y=138 was painted at y=276. That put a 138-pixel strip of
+     * live feed above the cover and pushed the bottom of the cover down over the app's own
+     * tab bar — reported, correctly, as "too much space on top, navbar covered".
+     *
+     * So it is measured rather than assumed. [CoverView] reports what it actually got.
+     */
+    private var origin = intArrayOf(0, 0)
+
     /** Called with the covered region whose report button was tapped. */
     var onReport: ((Bounds) -> Unit)? = null
 
@@ -162,6 +177,19 @@ class OverlayController(private val context: Context) {
         }
     }
 
+    /** The window turned out not to start where it was asked to; move the small ones. */
+    private fun reorigin(x: Int, y: Int) {
+        if (origin[0] == x && origin[1] == y) return
+        origin[0] = x
+        origin[1] = y
+        for ((bounds, blocker) in blockerViews) {
+            runCatching { windows.updateViewLayout(blocker, blockerParams(bounds)) }
+        }
+        for ((region, button) in reportViews) {
+            runCatching { windows.updateViewLayout(button, reportParams(region)) }
+        }
+    }
+
     private fun dp(value: Float) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, value, context.resources.displayMetrics,
     ).toInt()
@@ -178,6 +206,7 @@ class OverlayController(private val context: Context) {
             return
         }
         val target = view ?: CoverView(context).also {
+            it.onOrigin = { x, y -> reorigin(x, y) }
             val added = runCatching { windows.addView(it, coverParams()) }
             if (added.isFailure) {
                 Log.w(TAG, "could not add overlay window", added.exceptionOrNull())
@@ -263,8 +292,8 @@ class OverlayController(private val context: Context) {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         gravity = Gravity.TOP or Gravity.START
-        x = (region.right - size - inset).coerceAtLeast(region.left)
-        y = (region.top + inset).coerceAtMost(region.bottom - size)
+        x = (region.right - size - inset).coerceAtLeast(region.left) - origin[0]
+        y = (region.top + inset).coerceAtMost(region.bottom - size) - origin[1]
         width = size
         height = size
     }
@@ -279,8 +308,8 @@ class OverlayController(private val context: Context) {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         gravity = Gravity.TOP or Gravity.START
-        x = bounds.left
-        y = bounds.top
+        x = bounds.left - origin[0]
+        y = bounds.top - origin[1]
         width = bounds.width
         height = bounds.height
     }
@@ -293,6 +322,11 @@ class OverlayController(private val context: Context) {
 
         /** Nothing is painted at or below this row. See [OverlayController.show]. */
         private var floor: Int = Int.MAX_VALUE
+
+        /** Told where this view actually landed, so the small windows can follow. */
+        var onOrigin: ((Int, Int) -> Unit)? = null
+
+        private val here = IntArray(2)
 
         private val fill = Paint().apply { isAntiAlias = false }
         private val outline = Paint().apply {
@@ -341,18 +375,34 @@ class OverlayController(private val context: Context) {
         )
 
         override fun onDraw(canvas: Canvas) {
+            // Everything below is in screen coordinates, because that is what an
+            // accessibility tree reports and what the analyzers reason in. This window
+            // asked to start at the top-left of the display; it does not always get what
+            // it asked for, so the difference is measured and taken out rather than
+            // assumed to be zero. On one phone it was the height of the status bar, which
+            // put a strip of live feed above the cover and pushed the bottom of the cover
+            // down over the app's own tab bar.
+            getLocationOnScreen(here)
+            onOrigin?.invoke(here[0], here[1])
             if (DEBUG) {
                 val (t, b) = systemBarInsets()
-                Log.d(TAG, "draw ${bands.size} bands, view ${width}x$height, insets top=$t bottom=$b")
+                Log.d(
+                    TAG,
+                    "draw ${bands.size} bands, view ${width}x$height at ${here[0]},${here[1]}," +
+                        " insets top=$t bottom=$b",
+                )
             }
-            // The window is laid out edge to edge so that band coordinates line up with
-            // the screen coordinates the accessibility tree reports. That also puts the
-            // status and navigation bars inside it, and painting over the clock is both
-            // ugly and not this app's business.
+            canvas.translate(-here[0].toFloat(), -here[1].toFloat())
+
+            // The status and navigation bars are inside the window, and painting over the
+            // clock is both ugly and not this app's business.
             val (topInset, bottomInset) = systemBarInsets()
             // Two floors: the system's navigation bar, and the app's own. Whichever is
             // higher wins, and neither is negotiable.
-            val floor = minOf((height - bottomInset).toFloat(), this.floor.toFloat())
+            val floor = minOf(
+                (here[1] + height - bottomInset).toFloat(),
+                this.floor.toFloat(),
+            )
             for (band in bands) {
                 val top = maxOf(band.top, topInset).toFloat()
                 val bottom = minOf(band.bottom.toFloat(), floor)

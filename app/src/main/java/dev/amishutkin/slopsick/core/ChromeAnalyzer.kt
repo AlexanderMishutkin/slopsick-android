@@ -31,12 +31,9 @@ object ChromeAnalyzer {
     private val NAV_ITEMS = setOf("Home", "Explore", "Reels", "Messages", "Search", "Instagram")
 
     /**
-     * The stories row, which sits above the first post.
-     *
-     * Always kept here, and covered in the app. That reads like an inconsistency and was
-     * asked for as one: in the app the toolbar and the stories row together are the top
-     * quarter of the screen and the largest thing on it nobody chose, while on the web
-     * the row is a strip. So `hideStoriesTray` does not reach this file.
+     * The stories row, which sits above the first post. Kept, exactly as in the app — an
+     * earlier version swept it into the "everything above the first post" fragment and
+     * covered it, which the native side never did.
      */
     private val STORY = Regex("""^(?:.* )?Your story$|^Story by .+""")
 
@@ -130,7 +127,11 @@ object ChromeAnalyzer {
 
         val stories = storiesRow(labelled, content)
         if (stories != null) {
-            items += FeedItem(stories, Verdict.KEEP, Reason.STORIES_TRAY)
+            items += FeedItem(
+                stories,
+                if (settings.hideStoriesTray) Verdict.HIDE else Verdict.KEEP,
+                Reason.STORIES_TRAY,
+            )
         }
 
         // Above the first avatar is the tail of a post whose header has scrolled away.

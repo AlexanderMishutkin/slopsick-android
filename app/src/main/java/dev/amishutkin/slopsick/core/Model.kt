@@ -165,14 +165,10 @@ data class Settings(
      */
     val hideNetworkActivity: Boolean = false,
     /**
-     * Hide the stories row at the top of Instagram's feed.
-     *
-     * Instagram's app only — the web feed always keeps its stories row, which is what
-     * was asked for. In the app the toolbar and the stories row together are the top
-     * quarter of the screen, and left uncovered they were the largest thing on it that
-     * nobody chose. See `ChromeAnalyzer`.
+     * Hide the stories row at the top of Instagram's feed. Off: stories are people you
+     * followed on purpose, and they are kept in the app and on the web alike.
      */
-    val hideStoriesTray: Boolean = true,
+    val hideStoriesTray: Boolean = false,
     /**
      * Instagram only. Covers the Reels player and makes the Reels tab untappable —
      * Instagram opens straight into Reels often enough that hiding the button alone

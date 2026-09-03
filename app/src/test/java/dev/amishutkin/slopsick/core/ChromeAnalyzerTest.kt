@@ -60,23 +60,20 @@ class ChromeAnalyzerTest {
     }
 
     /**
-     * The stories row is kept on the web and covered in the app, which is what was asked
-     * for: in the app it and the toolbar are the top quarter of the screen, on the web it
-     * is a strip. An earlier version swept it into the "everything above the first post"
-     * fragment and covered it, which neither side wanted.
+     * The stories row is kept, exactly as it is in the app. An earlier version swept it
+     * into the "everything above the first post" fragment and covered it, which the
+     * native side never did.
      */
     @Test
-    fun `the stories row is kept on the web, whatever the app does`() {
+    fun `the stories row is kept, as it is in the app`() {
         val stories = ChromeAnalyzer.analyze(page).items
             .single { it.reason == Reason.STORIES_TRAY }
         assertEquals(Verdict.KEEP, stories.verdict)
         assertEquals(346, stories.bounds.top)
 
-        // The setting covers the row in the app and deliberately does not reach the web,
-        // where the row is a strip rather than a quarter of the screen.
-        val withSetting = ChromeAnalyzer.analyze(page, Settings(hideStoriesTray = true)).items
+        val hidden = ChromeAnalyzer.analyze(page, Settings(hideStoriesTray = true)).items
             .single { it.reason == Reason.STORIES_TRAY }
-        assertEquals(Verdict.KEEP, withSetting.verdict)
+        assertEquals(Verdict.HIDE, hidden.verdict)
     }
 
     @Test
