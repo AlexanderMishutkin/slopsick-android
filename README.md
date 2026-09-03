@@ -110,12 +110,23 @@ the navigation bar.
 2. **By shape** — a strip flush with the bottom of the screen, full width, a few percent
    of its height, holding three to six *equally sized* controls side by side. That is
    what a navigation bar is, and no app update changes it.
-3. **By giving up carefully.** Found neither way, the question becomes whether there is
-   *anything* down there shaped like a bar — a full-width strip of about the right height,
-   whatever it holds. If there is, the bottom 9% is left alone. If there is nothing of the
-   sort, the bar is genuinely gone (YouTube hides its own the moment you scroll) and the
-   feed runs to the bottom of the display. Without that second half, a Shorts shelf was
-   covered to within an inch of the bottom and its channel names showed under the cover.
+3. **By giving up carefully.** Found neither way, the bar may still be *declared* — its id
+   present in the tree, reporting bounds that cannot be true. A phone report showed
+   LinkedIn's own bar coming back as `[0,2712][1220,2712]`: zero height, pinned to the
+   bottom of a 2712-pixel screen, while the bar was on screen and being tapped.
+   `bottom_nav_container` did worse and reported a top *below* its own bottom. An app that
+   still says it has a bar is not offering us the space, so the bottom 9% is left alone.
+   Only when nothing declares a bar and nothing down there is even shaped like one does
+   the feed run to the bottom of the display — the YouTube case, where the bar really has
+   gone. Without that last distinction a Shorts shelf is covered to within an inch of the
+   bottom and its channel names show under the cover.
+
+**And none of it is trusted on its own.** The scan carries the bar out to the service,
+which remembers where each app's was and passes it to the overlay as a floor the painter
+will not cross. That last part is not belt and braces for its own sake: the first reports
+off a real phone had the bar in exactly the right place in the scan and a cover painted
+over it anyway, because what gets painted *between* scans is not always what the last scan
+decided. The invariant belongs to the thing holding the brush.
 
 The equal-width test is not decoration. Instagram's like/comment/share row also sits
 flush above the tab bar, is also full width, is also 76px tall and also holds a row of
@@ -197,6 +208,10 @@ after you stopped. Three things replaced it, none of them "scan more often":
   never queued behind a tree read.
 - **Between scans the cover is projected, not guessed.** A scroll event carries the exact
   number of pixels the list moved, so the last scan's holes move with it — no tree needed.
+  When the distance is unknown the fallback is the *feed*, never the whole screen. An
+  earlier version covered the whole drawable region there, and on a frame that had the
+  navigation bar wrong that was a white sheet over the entire app — reported, accurately,
+  as "random white polygons".
   The holes are *shrunk* as they travel, by a tenth of the distance covered: an
   extrapolation that is a few pixels out should err into the cover, never into a strip of
   an uncovered suggestion. Past two screens' worth of scrolling since the last scan the
@@ -409,11 +424,19 @@ Being specific, because the gaps matter more than the features:
 - **Instagram's stories row is still left uncovered**, along with Instagram's own toolbar,
   which together are the top 23% of the screen. That is by choice, not by accident; it is
   one flag (`hideStoriesTray`) if it should go.
-- **LinkedIn was not re-verified on the emulator** for this round of changes — the
-  session there had expired and logging back in needs credentials this repo does not
-  have. It is covered by 12 captured screens in the corpus, including the invariant that
-  its navigation bar survives.
-- **The stories row is kept on the web**, matching the app, where it is kept by default.
+- **LinkedIn's post grouping is wrong on LinkedIn 4.1.1196.** The analyzer assumes one
+  child of the lazy column is one feed item. Phone reports show a post split across
+  several children: one carries the "X liked this" header and another the post itself, so
+  the header is covered as unreadable while the post beside it stays. Most children come
+  back with no labels at all — `NO_SIGNAL`, covered by default — which is why a post you
+  subscribe to gets covered too. This needs the Instagram treatment (group a run of
+  children into one post) and is the largest thing still outstanding.
+- **LinkedIn cannot be re-verified on the emulator.** That account was restricted after
+  being driven with scripted input; see the note in this file's history. It is covered by
+  12 captured screens plus the phone reports.
+- **The stories row is covered in the app and kept on the web.** That reads as an
+  inconsistency and was asked for as one: in the app it and the toolbar are the top
+  quarter of the screen and the largest thing on it nobody chose, on the web it is a strip.
 - **The web feed leaves a thin strip below the site header uncovered** — the region
   starts at the header's reported bottom and the sticky header overlaps a little further.
 - **A strip under the status bar can leak.** When an app draws its content edge to edge,

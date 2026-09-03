@@ -199,3 +199,146 @@ class NavBarLookalikeTest {
         assertEquals(Bounds(0, 2211, 1080, 2337), ScreenChrome.of(root).navBar)
     }
 }
+
+/**
+ * The bounds a real phone reported, which no amount of reasoning would have produced.
+ *
+ * Xiaomi 2407FPN8EG, Android 16, 1220x2712, LinkedIn 4.1.1196. On most frames the bar is
+ * where you would expect. On some it is not merely missing — it is *present and lying*:
+ *
+ *     home_bottom_bar                   [0,2712][1220,2712]   zero height, at the very bottom
+ *     bottom_nav_container              [0,2715][1220,2712]   top below its own bottom
+ *     tab_feed                          [2,2715][245,2712]    likewise
+ *
+ * while the bar is on screen and being tapped. Read literally, that says the feed owns
+ * the whole display, and the cover went over the navigation bar.
+ */
+class CollapsedBarTest {
+
+    private val screen = Bounds(0, 0, 1220, 2712)
+
+    /** The bar as the phone reported it on a bad frame. */
+    private fun collapsedBar(): UiNode = FakeNode(
+        viewId = "com.linkedin.android:id/home_bottom_bar",
+        bounds = Bounds(0, 2712, 1220, 2712),
+        children = listOf(
+            FakeNode(
+                viewId = "com.linkedin.android:id/bottom_nav_container",
+                bounds = Bounds(0, 2715, 1220, 2712),
+                children = (0 until 5).map {
+                    FakeNode(bounds = Bounds(2 + it * 243, 2715, 245 + it * 243, 2712))
+                },
+            ),
+        ),
+    )
+
+    /** And as it reported it on a good one, a second earlier. */
+    private fun realBar(): UiNode = FakeNode(
+        viewId = "com.linkedin.android:id/home_bottom_bar",
+        bounds = Bounds(0, 2400, 1220, 2712),
+        children = listOf(
+            FakeNode(
+                viewId = "com.linkedin.android:id/bb_slim_bottom_bar_item_container",
+                bounds = Bounds(0, 2403, 1220, 2559),
+                children = (0 until 5).map {
+                    FakeNode(bounds = Bounds(2 + it * 243, 2403, 245 + it * 243, 2559))
+                },
+            ),
+        ),
+    )
+
+    private fun feedWith(bar: UiNode) = FakeNode(
+        bounds = screen,
+        children = listOf(
+            FakeNode(viewId = "sdui:lazyColumn", bounds = Bounds(0, 0, 1220, 2712)),
+            bar,
+        ),
+    )
+
+    @Test
+    fun `a bar reporting impossible bounds does not hand us the bottom of the screen`() {
+        val chrome = ScreenChrome.of(feedWith(collapsedBar()), navBarId = "home_bottom_bar")
+        assertNull("nothing usable was found", chrome.navBar)
+        assertTrue(
+            "a bar the app still declares is not free space: floor was ${chrome.floor}",
+            chrome.floor < 2712,
+        )
+    }
+
+    @Test
+    fun `a healthy bar is found and reported out to the service`() {
+        val chrome = ScreenChrome.of(feedWith(realBar()), navBarId = "home_bottom_bar")
+        assertEquals(2400, chrome.floor)
+        assertEquals(2400, chrome.navBar?.top)
+    }
+
+    @Test
+    fun `Instagram's collapsed toolbar is not mistaken for a ceiling`() {
+        // main_feed_action_bar comes back as [0,138][1220,138] on this phone once the
+        // toolbar has scrolled away — zero height, and no reason to start the cover lower.
+        val root = FakeNode(
+            bounds = screen,
+            children = listOf(
+                FakeNode(
+                    viewId = "com.instagram.android:id/main_feed_action_bar",
+                    bounds = Bounds(0, 138, 1220, 138),
+                ),
+                FakeNode(
+                    viewId = "com.instagram.android:id/tab_bar",
+                    bounds = Bounds(0, 2403, 1220, 2559),
+                    children = (0 until 5).map {
+                        FakeNode(bounds = Bounds(it * 244, 2403, (it + 1) * 244, 2559))
+                    },
+                ),
+            ),
+        )
+        val chrome = ScreenChrome.of(root, topBarId = "main_feed_action_bar", navBarId = "tab_bar")
+        assertNull(chrome.topBar)
+        assertEquals(2403, chrome.floor)
+    }
+}
+
+/**
+ * "No bar on this screen" and "could not find the bar" look the same from the tree and
+ * must not be treated the same. The first is YouTube scrolling its own bar away, and the
+ * feed really does run to the bottom. The second is LinkedIn reporting nonsense bounds
+ * for a bar that is on screen, and acting on it covers the way out of the app.
+ */
+class BarlessTest {
+
+    private val screen = Bounds(0, 0, 1220, 2712)
+
+    private fun rootOf(vararg children: UiNode) = FakeNode(bounds = screen, children = children.toList())
+
+    @Test
+    fun `nothing declared and nothing bar-shaped is confidently barless`() {
+        val chrome = ScreenChrome.of(
+            rootOf(FakeNode(bounds = Bounds(0, 200, 1220, 2712))),
+            navBarId = "pivot_bar",
+        )
+        assertTrue(chrome.barless)
+        assertEquals(2712, chrome.floor)
+    }
+
+    @Test
+    fun `a bar declared with impossible bounds is not barless`() {
+        val chrome = ScreenChrome.of(
+            rootOf(FakeNode(viewId = "com.linkedin.android:id/home_bottom_bar", bounds = Bounds(0, 2712, 1220, 2712))),
+            navBarId = "home_bottom_bar",
+        )
+        assertTrue("the bar could not be used", chrome.navBar == null)
+        assertTrue("but the app still says it has one", !chrome.barless)
+    }
+
+    @Test
+    fun `a bar that was found is not barless either`() {
+        val bar = FakeNode(
+            viewId = "com.instagram.android:id/tab_bar",
+            bounds = Bounds(0, 2403, 1220, 2559),
+            children = (0 until 5).map { FakeNode(bounds = Bounds(it * 244, 2403, (it + 1) * 244, 2559)) },
+        )
+        val chrome = ScreenChrome.of(rootOf(bar), navBarId = "tab_bar")
+        assertTrue(!chrome.barless)
+        assertEquals(2403, chrome.floor)
+    }
+}

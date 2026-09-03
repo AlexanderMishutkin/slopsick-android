@@ -72,6 +72,8 @@ object InstagramAnalyzer {
                     blackouts = listOf(reels),
                     blockers = blockers,
                     safe = chrome.safe,
+                    navBar = chrome.navBar,
+                    barless = chrome.barless,
                 )
             }
         }
@@ -90,6 +92,8 @@ object InstagramAnalyzer {
                     blackouts = listOf(region),
                     blockers = blockers,
                     safe = chrome.safe,
+                    navBar = chrome.navBar,
+                    barless = chrome.barless,
                 )
             }
         }
@@ -144,6 +148,8 @@ object InstagramAnalyzer {
             surface = Surface.FEED,
             blockers = blockers,
             safe = chrome.safe,
+            navBar = chrome.navBar,
+            barless = chrome.barless,
         )
     }
 

@@ -23,7 +23,7 @@ class SettingsStore(context: Context) {
         hideSuggested = prefs.getBoolean(HIDE_SUGGESTED, true),
         hidePromoted = prefs.getBoolean(HIDE_PROMOTED, true),
         hideNetworkActivity = prefs.getBoolean(HIDE_ACTIVITY, false),
-        hideStoriesTray = prefs.getBoolean(HIDE_STORIES, false),
+        hideStoriesTray = prefs.getBoolean(HIDE_STORIES, true),
         hideReels = prefs.getBoolean(HIDE_REELS, true),
         hideShorts = prefs.getBoolean(HIDE_SHORTS, true),
         hideExplore = prefs.getBoolean(HIDE_EXPLORE, true),

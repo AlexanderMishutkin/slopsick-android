@@ -70,14 +70,16 @@ class InstagramAnalyzerTest {
     }
 
     @Test
-    fun `the stories row follows its own setting`() {
+    fun `the stories row follows its own setting, and is covered by default`() {
+        // In the app, not on the web — the toolbar and the stories row together are the
+        // top quarter of the screen, which was the largest thing left uncovered on it.
         assertEquals(
-            Verdict.KEEP,
+            Verdict.HIDE,
             scan("igscroll-01.xml").items.single { it.reason == Reason.STORIES_TRAY }.verdict,
         )
         assertEquals(
-            Verdict.HIDE,
-            scan("igscroll-01.xml", Settings(hideStoriesTray = true))
+            Verdict.KEEP,
+            scan("igscroll-01.xml", Settings(hideStoriesTray = false))
                 .items.single { it.reason == Reason.STORIES_TRAY }.verdict,
         )
     }

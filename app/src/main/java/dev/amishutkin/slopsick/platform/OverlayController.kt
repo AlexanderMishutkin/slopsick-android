@@ -86,14 +86,24 @@ class OverlayController(private val context: Context) {
     /** Called with the covered region whose report button was tapped. */
     var onReport: ((Bounds) -> Unit)? = null
 
+    /**
+     * @param floor the first row that must never be painted — the top of the app's own
+     *   navigation bar. Enforced here rather than trusted from the caller: three of the
+     *   first bug reports off a real phone had the bar in exactly the right place in the
+     *   scan and a cover painted over it anyway, because what gets painted between scans
+     *   is not always what the last scan decided. The brush holds the invariant.
+     */
     fun show(
         app: TargetApp?,
         surface: Surface,
         covers: List<Bounds>,
         details: List<FeedItem>,
         blockers: List<Bounds>,
+        floor: Int = Int.MAX_VALUE,
     ) {
-        showCovers(colorFor(app, surface), covers, details)
+        showCovers(colorFor(app, surface), covers, details, floor)
+        // Blockers are the exception, and the only one: a blocked Reels tab is *inside*
+        // the navigation bar, which is the whole point of it.
         showBlockers(blockers, barColorFor(app, surface))
     }
 
@@ -156,7 +166,12 @@ class OverlayController(private val context: Context) {
         TypedValue.COMPLEX_UNIT_DIP, value, context.resources.displayMetrics,
     ).toInt()
 
-    private fun showCovers(color: Int, covers: List<Bounds>, details: List<FeedItem>) {
+    private fun showCovers(
+        color: Int,
+        covers: List<Bounds>,
+        details: List<FeedItem>,
+        floor: Int,
+    ) {
         if (covers.isEmpty()) {
             view?.let { runCatching { windows.removeView(it) } }
             view = null
@@ -171,6 +186,7 @@ class OverlayController(private val context: Context) {
             view = it
         }
         target.setFill(color)
+        target.setFloor(floor)
         target.setBands(covers, details)
     }
 
@@ -275,6 +291,9 @@ class OverlayController(private val context: Context) {
         private var bands: List<Bounds> = emptyList()
         private var details: List<FeedItem> = emptyList()
 
+        /** Nothing is painted at or below this row. See [OverlayController.show]. */
+        private var floor: Int = Int.MAX_VALUE
+
         private val fill = Paint().apply { isAntiAlias = false }
         private val outline = Paint().apply {
             isAntiAlias = true
@@ -291,6 +310,12 @@ class OverlayController(private val context: Context) {
             if (next == bands && nextDetails == details) return
             bands = next
             details = nextDetails
+            invalidate()
+        }
+
+        fun setFloor(value: Int) {
+            if (floor == value) return
+            floor = value
             invalidate()
         }
 
@@ -325,7 +350,9 @@ class OverlayController(private val context: Context) {
             // status and navigation bars inside it, and painting over the clock is both
             // ugly and not this app's business.
             val (topInset, bottomInset) = systemBarInsets()
-            val floor = (height - bottomInset).toFloat()
+            // Two floors: the system's navigation bar, and the app's own. Whichever is
+            // higher wins, and neither is negotiable.
+            val floor = minOf((height - bottomInset).toFloat(), this.floor.toFloat())
             for (band in bands) {
                 val top = maxOf(band.top, topInset).toFloat()
                 val bottom = minOf(band.bottom.toFloat(), floor)

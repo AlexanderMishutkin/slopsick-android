@@ -20,12 +20,21 @@ package dev.amishutkin.slopsick.core
  *     flush with the bottom of the screen, as wide as the screen, a few percent of its
  *     height, holding three to six equally-sized controls side by side. No app in this
  *     set draws anything else like that, and no version bump changes it.
- *  3. **By giving up carefully.** Found neither way, the question becomes whether there
- *     is *anything* along the bottom shaped like a bar. If there is, the bottom
- *     [NO_NAV_MARGIN] of the screen is left alone — covering a little less than we could
- *     is a bad day, covering the navigation bar is a bricked app. If there is nothing of
- *     the sort down there, the bar is genuinely gone (YouTube hides its own on scroll)
- *     and the feed runs to the bottom of the display.
+ *  3. **By giving up carefully.** Found neither way, the bar may still be *declared* — its
+ *     id present in the tree, reporting bounds that cannot be true. On the phone this was
+ *     reported from, LinkedIn's `home_bottom_bar` comes back as `[0,2712][1220,2712]` on
+ *     some frames: zero height, pinned to the bottom of a 2712-pixel screen, while the bar
+ *     is plainly on screen and being used. `bottom_nav_container` does worse and reports a
+ *     top *below* its own bottom. An app that still says it has a bar is not offering us
+ *     the space, so the bottom [NO_NAV_MARGIN] is left alone. Only when nothing declares a
+ *     bar and nothing down there is even shaped like one does the feed run to the bottom
+ *     of the display — which is the YouTube case, where the bar really has gone.
+ *
+ * None of this is trusted on its own. [FeedScan.navBar] carries the bar out to the
+ * service, which remembers where it was and refuses to paint below it whatever a later
+ * frame claims — see `OverlayController`. Three of these reports had the bar in exactly
+ * the right place and the cover was painted over it anyway, so the last word belongs to
+ * the thing holding the brush.
  *
  * Only the bottom bar gets the structural treatment. The same three rules were tried on
  * the top bar and had to be withdrawn: Instagram hides its toolbar on scroll, and with
@@ -47,6 +56,17 @@ data class ScreenChrome(
      */
     val fallbackFloor: Int = 0,
 ) {
+    /**
+     * True when this frame found no bar *and* is confident there is none — nothing
+     * declared one, and nothing along the bottom is even shaped like one.
+     *
+     * The distinction matters downstream. A frame that merely failed to find a bar must
+     * not be allowed to override where one was last seen; a frame that positively
+     * established there is no bar may, and has to, or YouTube's feed stops an inch short
+     * of the bottom every time its own bar scrolls away.
+     */
+    val barless: Boolean get() = navBar == null && fallbackFloor >= screen.bottom
+
     /** First row that may be painted. */
     val ceiling: Int get() = maxOf(topBar?.bottom ?: screen.top, screen.top)
 
@@ -116,8 +136,10 @@ data class ScreenChrome(
             val screen = screenOf(root)
             val byIdNav = byId(root, navBarId)
             val foundNav = findNavBar(root, screen)
+            // Present in the tree at all, even reporting nonsense bounds: see [collapsed].
+            val declared = navBarId != null && root.findById(navBarId) != null
             return ScreenChrome(
-                fallbackFloor = fallbackFloor(root, screen),
+                fallbackFloor = fallbackFloor(root, screen, declared),
                 screen = screen,
                 // The top bar is recognised by id or not at all; see the file comment.
                 topBar = byId(root, topBarId),
@@ -146,8 +168,11 @@ data class ScreenChrome(
          * is content and covering it is right — which is the difference between hiding a
          * Shorts shelf and hiding all but the last inch of one.
          */
-        private fun fallbackFloor(root: UiNode, screen: Bounds): Int {
+        private fun fallbackFloor(root: UiNode, screen: Bounds, declared: Boolean): Int {
             if (screen.isEmpty) return screen.bottom
+            // The app still says it has a bar on this screen; it is only lying about
+            // where. Nothing about that means the space is ours.
+            if (declared) return screen.bottom - (screen.height * NO_NAV_MARGIN).toInt()
             val minBottom = screen.bottom - (screen.height * BOTTOM_ZONE).toInt()
             val barLike = root.walk().any {
                 it.bounds.bottom >= minBottom && isBarShaped(it.bounds, screen)

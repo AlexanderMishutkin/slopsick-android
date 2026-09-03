@@ -81,6 +81,8 @@ object YouTubeAnalyzer {
                 blackouts = listOf(player),
                 blockers = blockers,
                 safe = chrome.safe,
+                navBar = chrome.navBar,
+                barless = chrome.barless,
             )
         }
 
@@ -93,6 +95,8 @@ object YouTubeAnalyzer {
             blackouts = shelves,
             blockers = blockers,
             safe = chrome.safe,
+            navBar = chrome.navBar,
+            barless = chrome.barless,
         )
     }
 

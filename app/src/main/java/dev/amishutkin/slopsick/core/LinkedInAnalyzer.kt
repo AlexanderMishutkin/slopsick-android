@@ -87,7 +87,10 @@ object LinkedInAnalyzer {
             .map { classify(it, settings) }
             .mapNotNull { it.clipTo(content) }
 
-        return FeedScan(TargetApp.LINKEDIN, content, items, safe = chrome.safe)
+        return FeedScan(
+            TargetApp.LINKEDIN, content, items,
+            safe = chrome.safe, navBar = chrome.navBar, barless = chrome.barless,
+        )
     }
 
     private fun classify(item: UiNode, settings: Settings): FeedItem {

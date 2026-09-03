@@ -9,9 +9,12 @@
   overlay is taken down, one PNG is written into the app's own folder, and the overlay
   goes back up. There is no INTERNET permission, so nothing captured can leave the phone.
 
-  flagRetrieveInteractiveWindows is deliberately absent: it exists to enable getWindows(),
-  which this service never calls — it reads rootInActiveWindow and nothing else — and
-  asking for it makes the system track every window on the device on our behalf.
+  flagRetrieveInteractiveWindows was dropped once as an unused optimisation and put back.
+  The service does only read rootInActiveWindow — but without the flag the system does not
+  track windows for us, and what "the active window" resolves to when the foreground app
+  is one we are not allowed to see turns out to be less definite than it looks. A cover
+  that outlives the app it was drawn over is the failure that produced; the saving was
+  never measured. It stays.
 
   android:notificationTimeout is 0 on purpose. At 100 the system drops events of the same
   type inside that window, and the dropped one is often the last — which showed up as a
@@ -20,7 +23,7 @@
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
     android:description="@string/service_description"

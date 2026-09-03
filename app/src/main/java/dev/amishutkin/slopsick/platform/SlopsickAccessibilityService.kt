@@ -79,6 +79,37 @@ class SlopsickAccessibilityService : AccessibilityService() {
     /** Kept so the blocker windows are not torn down and rebuilt on every scroll. */
     private var lastBlockers: List<Bounds> = emptyList()
 
+    /**
+     * The last place each app's navigation bar was seen, and the row below which nothing
+     * may be painted because of it.
+     *
+     * A frame is allowed to be wrong about the bar — LinkedIn reports its own collapsed
+     * to zero height at the bottom of the screen while it is plainly on screen and being
+     * tapped — but it is not allowed to move this down. Only a frame that actually finds
+     * a bar sets it, and it is dropped when the app is left, not while inside one.
+     */
+    private val navBars = HashMap<TargetApp, Pair<Bounds, Bounds>>()
+
+    private fun paintFloor(app: TargetApp, scan: FeedScan?): Int {
+        val screen = scan?.safe
+        scan?.navBar?.takeIf { !it.isEmpty && screen != null }
+            ?.let { navBars[app] = it to screen!! }
+        // A frame that positively established there is no bar clears the memory: that is
+        // YouTube scrolling its own away, and the space really is feed. A frame that only
+        // failed to find one changes nothing.
+        if (scan?.barless == true) navBars.remove(app)
+        // Only usable while the screen is the shape it was measured on: a bar remembered
+        // in portrait is in the wrong place the moment the phone is turned.
+        val remembered = navBars[app]
+            ?.takeIf { (_, on) -> screen == null || on.width == screen.width }
+            ?.first?.top
+        val claimed = scan?.safe?.bottom
+        return when {
+            remembered != null && claimed != null -> minOf(remembered, claimed)
+            else -> remembered ?: claimed ?: Int.MAX_VALUE
+        }
+    }
+
     /** When the feed last moved, and when a scan last finished. */
     private var lastScrollAt = 0L
     private var lastScanAt = 0L
@@ -119,8 +150,14 @@ class SlopsickAccessibilityService : AccessibilityService() {
             when {
                 front == null -> {
                     // Transiently unreadable inside the target app, or a window that is
-                    // not ours to see. Tolerate a moment of it, then assume we have left.
+                    // not ours to see — which is what the launcher looks like from in
+                    // here. Take the cover down on the first sign of it and only decide
+                    // we have left after [MAX_MISSES]: inside the app the next scan
+                    // repaints within a couple of hundred milliseconds, and a moment
+                    // uncovered there is a far smaller thing than a white rectangle
+                    // sitting on somebody's home screen.
                     misses += 1
+                    overlay.hide()
                     if (misses >= MAX_MISSES) return clear()
                 }
                 TargetApp.of(front) != currentApp -> return clear()
@@ -131,6 +168,9 @@ class SlopsickAccessibilityService : AccessibilityService() {
     }
 
     private var misses = 0
+
+    /** Consecutive scans that could not read the window at all. */
+    private var unreadable = 0
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -205,14 +245,21 @@ class SlopsickAccessibilityService : AccessibilityService() {
     private fun paintProjected(app: TargetApp, dy: Int?) {
         val scan = lastScan ?: return
         if (dy != null) driftSinceScan += abs(dy)
+        // The feed, and only the feed. An earlier version fell back to covering the whole
+        // safe region here, which on a frame that had got the navigation bar wrong meant
+        // a white sheet over the entire app — the "random white polygons" this was
+        // reported as. There is nothing to be gained from covering more than the feed:
+        // everything outside it was never ours to paint.
         val projected = dy?.let { OverlayPlan.project(scan, it, driftSinceScan) }
-            ?: OverlayPlan.project(scan, 0, Int.MAX_VALUE)
-            ?: scan.safe?.let { listOf(it) }
             ?: scan.feedBounds?.let { listOf(it) }
+            ?: scan.blackouts.takeIf { it.isNotEmpty() }
             ?: return
-        overlay.show(app, scan.surface, projected, emptyList(), lastBlockers)
+        overlay.show(app, scan.surface, projected, emptyList(), lastBlockers, paintFloor(app, scan))
         // A button anchored to where a band was a frame ago is worse than no button.
         overlay.setReports(emptyList())
+        // Painting without arming the watchdog is how a cover outlives the app it was
+        // drawn over: nothing else ever comes back to take it down.
+        armWatchdog(true)
     }
 
     /**
@@ -283,10 +330,18 @@ class SlopsickAccessibilityService : AccessibilityService() {
             // The window can be momentarily unreadable — mid-transition, or while the app
             // is busy. Leaving it here would strand whatever is on screen under the last
             // projection, so try again shortly rather than settling for a stale overlay.
+            //
+            // Bounded, though. An unreadable window is also what leaving the app looks
+            // like from in here, and an unbounded retry loop is a cover that never comes
+            // down. Past [MAX_MISSES] the honest answer is that we are not in the app any
+            // more, whatever the last event said.
+            unreadable += 1
+            if (unreadable > MAX_MISSES) return clear()
             main.removeCallbacks(scanTick)
             main.postDelayed(scanTick, RETRY_MS)
             return
         }
+        unreadable = 0
 
         // Chrome's address bar disappears on scroll, taking the only evidence of which
         // page this is with it. Remember it for as long as Chrome is in front.
@@ -342,7 +397,7 @@ class SlopsickAccessibilityService : AccessibilityService() {
             )
         }
         lastBlockers = blockers
-        overlay.show(app, tracked.surface, painted, details, blockers)
+        overlay.show(app, tracked.surface, painted, details, blockers, paintFloor(app, tracked))
         overlay.setReports(if (settled && used.reportButtons) bands else emptyList())
         armWatchdog(bands.isNotEmpty() || blockers.isNotEmpty())
         requeue()
@@ -416,6 +471,8 @@ class SlopsickAccessibilityService : AccessibilityService() {
         main.removeCallbacks(settleTick)
         main.removeCallbacks(watchdog)
         misses = 0
+        unreadable = 0
+        navBars.clear()
         currentApp = null
         lastScan = null
         lastTree = null
@@ -446,7 +503,7 @@ class SlopsickAccessibilityService : AccessibilityService() {
         const val RETRY_MS = 200L
 
         /** How often to check we are still in the app we are covering. */
-        const val WATCHDOG_MS = 400L
+        const val WATCHDOG_MS = 250L
 
         /** Each poll is another root read; Chrome cannot afford them as often. */
         const val CHROME_WATCHDOG_MS = 900L

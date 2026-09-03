@@ -117,6 +117,19 @@ data class FeedScan(
      * projection has to know where the navigation bar is without re-reading the tree.
      */
     val safe: Bounds? = null,
+    /**
+     * Where the app's own bottom navigation bar was on this frame, if it could be found.
+     *
+     * Carried out of the analyzer so the service can remember it. A frame that reports
+     * the bar collapsed to zero height, or gone, must not be allowed to move the floor
+     * down over a bar that is plainly still on screen — see `ScreenChrome`.
+     */
+    val navBar: Bounds? = null,
+    /**
+     * True when this frame established there is no bottom bar on screen at all, as
+     * opposed to merely failing to find one. See `ScreenChrome.barless`.
+     */
+    val barless: Boolean = false,
 ) {
     val hasFeed: Boolean get() = feedBounds != null && !feedBounds.isEmpty
 
@@ -151,8 +164,15 @@ data class Settings(
      * from your connections and the pages you follow survive.
      */
     val hideNetworkActivity: Boolean = false,
-    /** Hide the stories row at the top of Instagram's feed. */
-    val hideStoriesTray: Boolean = false,
+    /**
+     * Hide the stories row at the top of Instagram's feed.
+     *
+     * Instagram's app only — the web feed always keeps its stories row, which is what
+     * was asked for. In the app the toolbar and the stories row together are the top
+     * quarter of the screen, and left uncovered they were the largest thing on it that
+     * nobody chose. See `ChromeAnalyzer`.
+     */
+    val hideStoriesTray: Boolean = true,
     /**
      * Instagram only. Covers the Reels player and makes the Reels tab untappable —
      * Instagram opens straight into Reels often enough that hiding the button alone
