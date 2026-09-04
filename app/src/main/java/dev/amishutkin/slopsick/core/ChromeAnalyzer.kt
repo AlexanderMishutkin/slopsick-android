@@ -87,6 +87,9 @@ object ChromeAnalyzer {
     /** A node this close to the top of the page is part of the header, not content. */
     private const val TOP_FLUSH = 8
 
+    /** However far the header grows, it is still a header and not half the screen. */
+    private const val MAX_TOP_BAR = 0.15
+
     /** The stories tray: a row of equal tiles, taller than a bar, near the feed's head. */
     private const val MIN_STORY_HEIGHT = 0.10
     private const val MAX_STORY_HEIGHT = 0.35
@@ -309,14 +312,35 @@ object ChromeAnalyzer {
     }
 
     /**
-     * Where the site's own header ends: the lowest edge of anything short that starts in
-     * the header band — but only once something is actually flush with the top of the
-     * page, so that a feed scrolled under a hidden header is not mistaken for one.
+     * Where the site's own header ends.
+     *
+     * Something has to be flush with the top of the page before there is a header at all,
+     * so that a feed scrolled under a hidden one is not mistaken for it. From there the
+     * bar is grown downwards through whatever *overlaps* what is already the bar, and
+     * stops at the first clear line across the page.
+     *
+     * Taking the lowest edge of everything that merely starts in the top tenth instead —
+     * which is what this did — reads the header as ending wherever the topmost post
+     * header happens to end, because the two are only a hundred pixels apart when the
+     * stories row has scrolled under the site's sticky bar. That swallowed the first
+     * post's avatar into the chrome, left the feed with no post boundaries at all, and
+     * covered it end to end: the exact failure the shape rules were added to prevent,
+     * arriving by a different door.
      */
     private fun topBar(short: List<Tag>, web: UiNode): Int? {
-        val band = web.bounds.top + web.bounds.height * MAX_BAR
-        if (short.none { it.bounds.top <= web.bounds.top + TOP_FLUSH }) return null
-        return short.filter { it.bounds.top < band }.maxOfOrNull { it.bounds.bottom }
+        val limit = web.bounds.top + (web.bounds.height * MAX_TOP_BAR).toInt()
+        val within = short.filter { it.bounds.bottom <= limit }
+        var bottom = within
+            .filter { it.bounds.top <= web.bounds.top + TOP_FLUSH }
+            .maxOfOrNull { it.bounds.bottom }
+            ?: return null
+        while (true) {
+            val grown = within.filter { it.bounds.top < bottom }
+                .maxOfOrNull { it.bounds.bottom } ?: break
+            if (grown <= bottom) break
+            bottom = grown
+        }
+        return bottom
     }
 
     /**

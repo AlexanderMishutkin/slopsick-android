@@ -223,6 +223,25 @@ class ChromeAnalyzerTest {
     }
 
     /**
+     * The same feed a moment later, scrolled just enough that the stories row slides under
+     * the site's sticky header. The two are then a hundred pixels apart, and reading the
+     * header as "the lowest edge of anything near the top" swallowed the first post's
+     * avatar along with them — which left the page with no post boundaries and covered it
+     * end to end, friends included, exactly as the missing Russian labels had.
+     */
+    @Test
+    fun `a post header just under the site's own is not mistaken for part of it`() {
+        val scan = ChromeAnalyzer.analyze(XmlUiNode.fixture("chromeig-ru2.xml"))
+        assertEquals("the header ends where the header ends", 476, scan.feedBounds!!.top)
+        val post = scan.items.single { it.reason == Reason.FOLLOWED }
+        assertEquals(Verdict.KEEP, post.verdict)
+        assertEquals("the post starts at its own avatar", 531, post.bounds.top)
+        assertTrue("nothing is painted over it", OverlayPlan.cover(scan).none {
+            it.verticalOverlap(post.bounds) > 0
+        })
+    }
+
+    /**
      * A feed scrolled past its stories, labelled in a language this file has never seen.
      * The bars are rows of equal controls hugging an edge; the post header is a small
      * square at the left margin with a name beside it. That is all it takes.
