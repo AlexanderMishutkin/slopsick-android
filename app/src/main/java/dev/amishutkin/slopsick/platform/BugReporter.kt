@@ -192,10 +192,22 @@ class BugReporter(private val context: Context) {
             .append("\",\n")
         out.append("  \"android\": ").append(Build.VERSION.SDK_INT).append(",\n")
         out.append("  \"appVersion\": \"").append(escape(versionOf(app.packageName))).append("\",\n")
+        // Every switch, not just the three app ones. A report saying a post was kept is
+        // ambiguous until you know whether the rule that would have hidden it was on: a
+        // default changed between builds stays switched off for anyone who had already
+        // saved their settings once, and that looks exactly like a broken analyzer.
         out.append("  \"settings\": {")
             .append("\"instagram\": ").append(settings.instagram)
             .append(", \"linkedIn\": ").append(settings.linkedIn)
             .append(", \"youtube\": ").append(settings.youtube)
+            .append(", \"suggested\": ").append(settings.hideSuggested)
+            .append(", \"promoted\": ").append(settings.hidePromoted)
+            .append(", \"networkActivity\": ").append(settings.hideNetworkActivity)
+            .append(", \"feedModules\": ").append(settings.hideFeedModules)
+            .append(", \"stories\": ").append(settings.hideStoriesTray)
+            .append(", \"reels\": ").append(settings.hideReels)
+            .append(", \"explore\": ").append(settings.hideExplore)
+            .append(", \"shorts\": ").append(settings.hideShorts)
             .append("},\n")
         out.append("  \"surface\": \"").append(scan?.surface?.name ?: "NONE").append("\",\n")
         out.append("  \"feed\": ").append(scan?.feedBounds?.let { rect(it) } ?: "null").append(",\n")

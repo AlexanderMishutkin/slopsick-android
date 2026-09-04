@@ -74,25 +74,41 @@ class CorpusInvariantsTest {
      * The safety property. Anything inside the feed that was not explicitly kept has to
      * end up under the overlay — an ad, a suggestion, a card still loading, or a stretch
      * of feed no item claimed at all. A filter that leaves gaps is not filtering.
+     *
+     * The one licensed gap is a hairline: the plan does not paint a band a few dozen
+     * pixels tall, because at that size a band is the seam between two decisions rather
+     * than a piece of feed, and painting it puts a flickering white stripe on the screen.
+     * Nothing readable fits in one, so the run has to be both unpainted *and* shorter
+     * than a painted band would be.
      */
     @Test
-    fun `everything not kept is covered`() {
+    fun `everything not kept is covered, bar a hairline`() {
         for ((file, scan) in corpus()) {
             val feed = scan.feedBounds ?: continue
             val kept = scan.items.filter { it.verdict == Verdict.KEEP }.map { it.bounds }
             val bands = OverlayPlan.cover(scan)
 
+            var run = 0
             var y = feed.top
-            while (y < feed.bottom) {
-                val inKept = kept.any { y >= it.top && y < it.bottom }
-                val inBand = bands.any { y >= it.top && y < it.bottom }
-                if (!inKept && !inBand) {
-                    fail("${file.name}: y=$y is neither kept nor covered (feed $feed)")
+            while (y <= feed.bottom) {
+                val bare = y < feed.bottom &&
+                    kept.none { y >= it.top && y < it.bottom } &&
+                    bands.none { y >= it.top && y < it.bottom }
+                if (bare) {
+                    run += 1
+                } else {
+                    if (run >= HAIRLINE) {
+                        fail("${file.name}: $run px ending at y=$y is neither kept nor covered")
+                    }
+                    run = 0
                 }
                 y += 1
             }
         }
     }
+
+    /** The tallest run of feed the plan is allowed to leave unpainted. */
+    private val HAIRLINE = 40
 
     @Test
     fun `an item is never both kept and hidden`() {

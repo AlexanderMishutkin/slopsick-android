@@ -54,9 +54,24 @@ class ChromeAnalyzerTest {
     fun `the region does not shrink to whatever avatar happens to be visible`() {
         val scan = ChromeAnalyzer.analyze(page)
         assertEquals(333, scan.feedBounds!!.top)
-        val fragment = scan.items.single { it.reason == Reason.OFF_SCREEN_HEADER }
-        assertEquals("the space above the first post is covered, not ignored",
-            Verdict.UNKNOWN, fragment.verdict)
+        // The first post's avatar is at 682. Painting starts above it — at the far side
+        // of the stories row, the one thing between it and the site's header — rather
+        // than at the first post the scan happened to recognise.
+        assertTrue(OverlayPlan.cover(scan).any { it.top < 682 })
+    }
+
+    /**
+     * A feed scrolled past its first post: no stories, and a long stretch of page above
+     * the first avatar. That stretch is the tail of a post whose header has gone, and it
+     * is claimed as an item so the ledger and the labels know what it is.
+     */
+    @Test
+    fun `the tail of a post scrolled past is claimed, not ignored`() {
+        val fragment = ChromeAnalyzer.analyze(scrolledFeed()).items
+            .single { it.reason == Reason.OFF_SCREEN_HEADER }
+        assertEquals(Verdict.UNKNOWN, fragment.verdict)
+        assertEquals(310, fragment.bounds.top)
+        assertEquals(1400, fragment.bounds.bottom)
     }
 
     /**
@@ -156,5 +171,96 @@ class ChromeAnalyzerTest {
     fun `turning the filter off keeps the suggested post`() {
         val scan = ChromeAnalyzer.analyze(page, Settings(hideSuggested = false))
         assertTrue(scan.items.filter { it.author != null }.all { it.verdict == Verdict.KEEP })
+    }
+
+    /**
+     * A feed with none of this file's words on it: the site's bars, its stories tray and
+     * its post headers all have to be found by their shape alone. The labels here are
+     * Spanish, which no list in the analyzer mentions.
+     */
+    @Test
+    fun `a page in a language the analyzer does not speak still reads`() {
+        val scan = ChromeAnalyzer.analyze(scrolledFeed())
+        assertTrue(scan.hasFeed)
+        assertEquals("under the site's own header", 310, scan.feedBounds!!.top)
+        assertEquals("above the site's own navigation", 2207, scan.feedBounds!!.bottom)
+        assertEquals(1, scan.items.count { it.reason == Reason.FOLLOWED })
+    }
+
+    /**
+     * The page as Chrome reports it when the account's language is Russian. Nothing in
+     * this capture says "profile picture", so before the shape rules the whole feed came
+     * back as one unrecognised block and was covered end to end — the reader's friends
+     * included, which is exactly what the filter exists not to do.
+     */
+    private val russian = XmlUiNode.fixture("chromeig-ru.xml")
+
+    @Test
+    fun `a Russian feed is read post by post, not as one block`() {
+        val scan = ChromeAnalyzer.analyze(russian)
+        assertTrue(scan.hasFeed)
+        assertEquals("below the site's header", 472, scan.feedBounds!!.top)
+        assertEquals("above the site's bottom navigation", 2396, scan.feedBounds!!.bottom)
+        assertTrue("the feed is not one unrecognised blob",
+            scan.items.none { it.reason == Reason.OFF_SCREEN_HEADER })
+    }
+
+    @Test
+    fun `the post from a friend is kept on a Russian feed`() {
+        val post = ChromeAnalyzer.analyze(russian).items.single { it.reason == Reason.FOLLOWED }
+        assertEquals(Verdict.KEEP, post.verdict)
+        assertTrue("the author was read from the header", post.author != null)
+    }
+
+    @Test
+    fun `the Russian stories row is kept, and the navigation is not covered`() {
+        val scan = ChromeAnalyzer.analyze(russian)
+        val stories = scan.items.single { it.reason == Reason.STORIES_TRAY }
+        assertEquals(Verdict.KEEP, stories.verdict)
+        assertEquals(489, stories.bounds.top)
+        assertEquals(846, stories.bounds.bottom)
+        assertTrue(OverlayPlan.cover(scan).all { it.top >= 472 && it.bottom <= 2396 })
+    }
+
+    /**
+     * A feed scrolled past its stories, labelled in a language this file has never seen.
+     * The bars are rows of equal controls hugging an edge; the post header is a small
+     * square at the left margin with a name beside it. That is all it takes.
+     */
+    private fun scrolledFeed(): UiNode {
+        val nav = (0 until 5).map { i ->
+            FakeNode(
+                contentDesc = listOf("Inicio", "Explorar", "Publicar", "Mensajes", "Perfil")[i],
+                bounds = Bounds(40 + i * 240, 2207, 180 + i * 240, 2336),
+            )
+        }
+        return FakeNode(
+            bounds = Bounds(0, 0, 1080, 2400),
+            children = listOf(
+                FakeNode(
+                    viewId = "com.android.chrome:id/url_bar",
+                    text = "instagram.com",
+                    bounds = Bounds(210, 71, 670, 202),
+                ),
+                FakeNode(
+                    className = "android.webkit.WebView",
+                    bounds = Bounds(0, 210, 1080, 2339),
+                    children = listOf(
+                        FakeNode(contentDesc = "Notificaciones", bounds = Bounds(42, 210, 400, 310)),
+                        FakeNode(
+                            bounds = Bounds(28, 1400, 118, 1490),
+                            children = listOf(
+                                FakeNode(
+                                    contentDesc = "Foto del perfil de granite.works",
+                                    bounds = Bounds(28, 1400, 118, 1490),
+                                ),
+                            ),
+                        ),
+                        FakeNode(contentDesc = "granite.works", bounds = Bounds(147, 1400, 359, 1450)),
+                        FakeNode(bounds = Bounds(0, 1500, 1080, 2200)),
+                    ) + nav,
+                ),
+            ),
+        )
     }
 }

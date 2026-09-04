@@ -16,8 +16,22 @@ package dev.amishutkin.slopsick.core
  */
 object OverlayPlan {
 
-    /** Vertical slivers thinner than this are not worth painting. */
+    /** Vertical slivers thinner than this are not worth reasoning about. */
     private const val MIN_BAND = 2
+
+    /**
+     * Thinner than this and a band is not painted at all.
+     *
+     * A band is the gap between two things the scan decided to keep, and when those two
+     * decisions disagree by a few pixels — a post's bounds reported one frame late, a
+     * hole projected a little short — the gap is a stripe of nothing rather than a piece
+     * of feed. On a phone those arrive as thin white polygons flicking in and out at the
+     * seams between posts, which is noise pretending to be a cover. No post, ad or
+     * suggestion is this short, so a band this thin is always the artefact and never the
+     * thing: the cost of dropping it is a hairline of feed, and the cost of drawing it is
+     * a screen that looks broken.
+     */
+    private const val MIN_COVER_BAND = 40
 
     /** Below this a rectangle cannot hold a readable label, so it does not get one. */
     private const val MIN_LABEL_HEIGHT = 140
@@ -60,10 +74,10 @@ object OverlayPlan {
         val bands = mutableListOf<Bounds>()
         var y = feed.top
         for ((top, bottom) in merge(holes)) {
-            if (top - y >= MIN_BAND) bands += Bounds(feed.left, y, feed.right, top)
+            if (top - y >= MIN_COVER_BAND) bands += Bounds(feed.left, y, feed.right, top)
             y = maxOf(y, bottom)
         }
-        if (feed.bottom - y >= MIN_BAND) bands += Bounds(feed.left, y, feed.right, feed.bottom)
+        if (feed.bottom - y >= MIN_COVER_BAND) bands += Bounds(feed.left, y, feed.right, feed.bottom)
         return bands
     }
 

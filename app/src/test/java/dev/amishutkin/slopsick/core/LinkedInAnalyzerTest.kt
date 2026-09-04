@@ -114,4 +114,50 @@ class LinkedInAnalyzerTest {
             assertEquals(file.name, ids.size, ids.toSet().size)
         }
     }
+
+    // --- the same feed, in Russian ---------------------------------------------------
+    //
+    // Three captures from a phone running LinkedIn in Russian, where every post came back
+    // KEEP: none of the English signals matched, and the fallback that keeps a post on the
+    // strength of having an author was reading "13 ч." out of a timestamp.
+
+    @Test
+    fun `what your network reacted to is recognised in Russian too`() {
+        val liked = scan("liru-03.xml").items.filter { it.reason == Reason.NETWORK_ACTIVITY }
+        assertEquals("both posts on the screen are ones someone reacted to", 2, liked.size)
+        assertTrue(liked.all { it.verdict == Verdict.HIDE })
+        assertTrue("the post itself, not just its header", liked.any { it.bounds.height > 1000 })
+    }
+
+    @Test
+    fun `every Russian capture has something hidden in it`() {
+        for (name in listOf("liru-01.xml", "liru-02.xml", "liru-03.xml")) {
+            val scan = scan(name)
+            assertTrue("$name: reads as a feed", scan.hasFeed)
+            assertTrue(
+                "$name: nothing hidden — the whole feed came back kept",
+                scan.items.any { it.isHidden },
+            )
+        }
+    }
+
+    @Test
+    fun `the Russian degree marker is read like the English one`() {
+        val degrees = scan("liru-03.xml").items.map { it.reason }
+        assertTrue(degrees.contains(Reason.NETWORK_ACTIVITY))
+        assertTrue(scan("liru-03.xml").items.none { it.reason == Reason.CONNECTION })
+    }
+
+    /**
+     * The fail-open path this closed. A timestamp is not an author, and a feed whose
+     * language none of the lists cover is a feed of nothing but timestamps: keeping every
+     * post in one is worse than covering it, because the reader cannot see it happening.
+     */
+    @Test
+    fun `a post is not kept on the strength of a timestamp`() {
+        val screen = linkedInScreen("13 ч. • Доступность: все", "Показать перевод")
+        val item = LinkedInAnalyzer.analyze(screen).items.single()
+        assertEquals(Verdict.UNKNOWN, item.verdict)
+        assertEquals(Reason.NO_SIGNAL, item.reason)
+    }
 }

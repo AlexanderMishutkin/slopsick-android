@@ -11,9 +11,19 @@ package dev.amishutkin.slopsick.core
  *
  * That is a real regression against the browser extension, which classifies LinkedIn
  * structurally and so works in any interface language. Until LinkedIn exposes ids, the
- * honest position is that this analyzer is English-only, and it says so out loud rather
- * than silently misclassifying: when no signal matches at all, the verdict is UNKNOWN
- * and the item stays covered.
+ * honest position is that this analyzer only knows the languages listed below, and it
+ * says so out loud rather than silently misclassifying: when no signal matches at all,
+ * the verdict is UNKNOWN and the item stays covered.
+ *
+ * Which makes the fail-open path the one to watch. A capture from a phone running
+ * LinkedIn in Russian matched none of the English signals — "X liked this" is
+ * "X отметил(а), что нравится этот контент" — and every post came back KEEP anyway,
+ * because the loose actor guess below happily read "13 ч." out of a timestamp and a post
+ * with an author and no follow control is taken to be someone you know. So the rule that
+ * keeps a post on the strength of an author now insists on an author read from a "view
+ * profile" label, which is a sentence about a person rather than any label with a bullet
+ * in it. An unrecognised language now costs a covered feed, which is visible and
+ * fixable, rather than an uncovered one, which is not.
  */
 object LinkedInAnalyzer {
 
@@ -32,10 +42,10 @@ object LinkedInAnalyzer {
     // Everything below is language-dependent. Grouped here so the damage is visible
     // and so translating the app is a matter of extending one object.
 
-    private val PROMOTED = listOf("Promoted", "Sponsored")
+    private val PROMOTED = listOf("Promoted", "Sponsored", "Продвигается", "Реклама")
 
     /** Controls that only appear on someone you have no relationship with. */
-    private val FOLLOW_CONTROL = listOf("Follow ", "Invite ")
+    private val FOLLOW_CONTROL = listOf("Follow ", "Invite ", "Отслеживать", "Пригласить")
 
     /** The feed explaining its own guess. */
     private val FEED_GUESS = listOf(
@@ -44,10 +54,21 @@ object LinkedInAnalyzer {
         "Suggested",
         "Trending",
         "Recommended for you",
+        "Вы недавно подписались",
+        "Рекомендовано для вас",
+        "Рекомендуем",
+        "Популярное",
     )
 
-    /** Your network reacting to a stranger's post, rather than posting themselves. */
-    private val ACTIVITY = listOf(" commented", " likes this", " reposted", " replied")
+    /**
+     * Your network reacting to a stranger's post, rather than posting themselves. This is
+     * the most-used rule in the file and the one the Russian capture proved was missing:
+     * "нравится этот контент" is the whole of "liked this".
+     */
+    private val ACTIVITY = listOf(
+        " commented", " likes this", " reposted", " replied",
+        "нравится этот контент", "прокомментировал", "поделил", "ответил", "репостнул",
+    )
 
     /** Interstitial cards that are not posts at all. */
     private val MODULES = listOf(
@@ -55,12 +76,24 @@ object LinkedInAnalyzer {
         "Recommended for you",
         "Prepare for your job search",
         "Add to your feed",
+        "Люди, которых вы можете знать",
+        "Добавить в ленту",
+        "Подготовьтесь к поиску работы",
     )
 
-    /** A first-degree connection: someone you actually know. */
-    private val FIRST_DEGREE = Regex("""•\s*1st""")
-    private val VIEW_PROFILE = Regex("""^View (.+?)(?:’s|'s)? profile""")
-    private val OTHER_DEGREE = Regex("""•\s*(2nd|3rd\+?)""")
+    /**
+     * The degree marker, which every language writes as a bullet and a number: "• 1st",
+     * "• 2nd", "• 3-й", "• 3-й+". Anchored to the end of its label so a bullet in the
+     * middle of a sentence — "13h • Visibility: Global" — cannot pass for one.
+     */
+    private val FIRST_DEGREE = Regex("""•\s*1(?:st|-й|-я|°|º)?\s*(?=\||$)""")
+    private val OTHER_DEGREE = Regex("""•\s*[23](?:nd|rd|-й|-я|°|º)?\+?\s*(?=\||$)""")
+
+    /** "View <name>'s profile", in each language that has been seen. */
+    private val VIEW_PROFILE = listOf(
+        Regex("""^View (.+?)(?:’s|'s)? profile"""),
+        Regex("""^(?:Про|По)смотреть профиль участника (.+)$"""),
+    )
 
     /**
      * Longest a label can be and still be part of the post's furniture rather than its
@@ -132,10 +165,14 @@ object LinkedInAnalyzer {
         if (hasFollowControl || OTHER_DEGREE.containsMatchIn(blob)) {
             return verdict(Reason.SUGGESTED, settings.hideSuggested)
         }
-        // A post with an author but no follow control and no degree marker: a page you
-        // follow. This mirrors the browser extension's rule, which treats the absence of
-        // a Follow/Connect control as evidence of a relationship.
-        if (actor != null) {
+        // A post with a named author but no follow control and no degree marker: a page
+        // you follow. This mirrors the browser extension's rule, which treats the absence
+        // of a Follow/Connect control as evidence of a relationship — but it only holds
+        // if the author was actually read. The loose guess below returns "13h" for a
+        // timestamp, and a feed in a language none of the lists above cover is a feed of
+        // nothing but loose guesses; keeping every post in it is the one outcome worse
+        // than covering them all.
+        if (profile != null) {
             return verdict(Reason.CONNECTION, false)
         }
         // No author, no controls, no labels at all — a card still loading, or a layout
@@ -153,8 +190,8 @@ object LinkedInAnalyzer {
      */
     private fun profileActorOf(labels: List<String>): String? {
         for (label in labels) {
-            VIEW_PROFILE.find(label)?.groupValues?.get(1)?.trim()
-                ?.takeIf { it.isNotEmpty() }
+            VIEW_PROFILE.firstNotNullOfOrNull { it.find(label)?.groupValues?.get(1) }
+                ?.trim()?.takeIf { it.isNotEmpty() }
                 ?.let { return it }
         }
         return null

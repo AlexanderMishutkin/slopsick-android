@@ -22,6 +22,10 @@ HANDLE_PATTERNS = [
     # Instagram on the mobile web, as Chrome reports it to a screen reader.
     re.compile(r'^Story by ([a-z0-9._]{2,30}),'),
     re.compile(r'^@([a-z0-9._]{2,30})$'),
+    # ...and as Chrome reports it when the account's language is not English.
+    re.compile(r'^Фото профиля ([a-z0-9._]{2,30})$'),
+    re.compile(r'^История ([a-z0-9._]{2,30}),'),
+    re.compile(r'^Подписаны ([a-z0-9._]{2,30}) и ещё'),
 ]
 NAME_PATTERNS = [
     re.compile(r"^(.+?)'s profile picture$"),
@@ -33,6 +37,17 @@ NAME_PATTERNS = [
     re.compile(r'^View (.+?) profile image$'),
     re.compile(r'^(.+?) commented$'),
     re.compile(r'^(.+?) likes this$'),
+    re.compile(r'^Фото профиля (.+)$'),
+    # LinkedIn, as Chrome and the app report it when the interface is in Russian.
+    re.compile(r'^(?:Про|По)смотреть профиль участника (.+)$'),
+    re.compile(r'^Отслеживать участника (.+)$'),
+    re.compile(r'^(.+?) отметил\(а\), что нравится этот контент$'),
+    re.compile(r'^(.+?) прокомментировал'),
+    re.compile(r'^Отреагировавшие: (.+?) и еще'),
+    re.compile(r'^(.+?) и еще \d'),
+    re.compile(r'^(.+?), профиль Подтверждено'),
+    re.compile(r'^(.+?), В поиске работы'),
+    re.compile(r'^(.+?)\s+•\s*\d'),
 ]
 # "by X," can catch ordinary prose, so it stays shape-guarded; everything above is
 # unambiguously an identity, whatever characters the person put in their display name.
