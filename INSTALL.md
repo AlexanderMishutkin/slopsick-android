@@ -11,13 +11,13 @@ below is a hand-installed APK.
 **Install with an installer attributed.** Not this:
 
 ```
-adb install SLOPSICK-1.1.3.apk          # don't
+adb install SLOPSICK-1.1.6.apk          # don't
 ```
 
 This:
 
 ```
-adb install -r -i com.android.vending SLOPSICK-1.1.3.apk
+adb install -r -i com.android.vending SLOPSICK-1.1.6.apk
 ```
 
 A plain `adb install` leaves `installerPackageName=null`. Android 13 and later treat an
@@ -91,7 +91,7 @@ Needs JDK 17+ and an Android SDK with platform 36. `local.properties` must point
 SDK (`sdk.dir=/path/to/android-sdk`).
 
 ```
-./gradlew :app:testDebugUnitTest    # 97 tests, no device needed
+./gradlew :app:testDebugUnitTest    # 145 tests, no device needed
 ./gradlew :app:assembleDebug        # app/build/outputs/apk/debug/
 ./gradlew :app:assembleRelease      # app/build/outputs/apk/release/
 ```

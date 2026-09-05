@@ -3,9 +3,12 @@
 Covers the posts you did not ask to see — in the Instagram, LinkedIn and YouTube apps,
 and on instagram.com in Chrome.
 
-It is the same idea as the [browser extension](https://github.com/apmishutkin/SLOPSICK)
+It is the same idea as the [browser extension](https://github.com/AlexanderMishutkin/FocusTube)
 — keep what you follow, lose what the feed picked for you — carried onto a phone,
 where the rules are different and worse.
+
+Installing it: [INSTALL.md](INSTALL.md). What changed in each release, and which bug
+report caused it: [CHANGELOG.md](CHANGELOG.md).
 
 ## What it actually does
 
@@ -25,6 +28,12 @@ open stops filtering without telling you. This one fails shut.
 The cover does not intercept touches, so scrolling and flinging feel exactly as they
 did — Instagram's scroll physics stay Instagram's problem.
 
+The four surfaces do not read equally well, and the reason is language. The native apps
+expose English view ids whatever the interface language is set to; Chrome and LinkedIn
+expose only the labels a screen reader announces, and those are translated. So Instagram
+and YouTube work in any language, Chrome works by shape with English and Russian words as
+a bonus, and LinkedIn knows English and Russian and covers what it cannot read.
+
 ### Instagram
 
 Instagram is the good case. Despite Litho, the feed exposes stable view ids, so the
@@ -36,6 +45,14 @@ That works in any interface language. The visible label is *not* usable: `second
 holds the audio track, "Edited · 7d", "Translate with AI" **or** "Suggested for you",
 depending on the post. Seven of the test fixtures are suggested posts whose label says
 something else; reading the label would pass every other test and miss all seven.
+
+One thing is deliberately **not** covered: the "You've seen all new posts" bar
+(`demarcator_bar_container`), the line where the feed you chose ends and the
+recommendations begin. It breaks the grouping the way a post header does, and it is kept.
+Covering it made a working filter look like a feed that had gone blank — there was no
+longer anything on screen that told the reader "the rest was hidden" apart from "this is
+broken". The "Suggested for you" heading below it is still the algorithm talking, and is
+still covered.
 
 ### Reels
 
@@ -187,8 +204,26 @@ Three things worth knowing:
 
 Only instagram.com. LinkedIn and YouTube on the mobile web are not read.
 
-Every signal here is a word — Chrome exposes the page's accessible names, the same
-strings a screen reader announces, and those are translated with the site.
+**Almost nothing here is a string comparison, and that is the whole design.** The
+native analyzers read view ids, which Instagram ships in English whatever the account
+language is. The web has no ids, only the labels a screen reader announces, and those are
+translated. A capture from a phone whose Instagram is in Russian matched not one landmark:
+no avatar was `"X's profile picture"`, it was `"Фото профиля X"`, and with no avatars there
+were no post boundaries, so the whole feed collapsed into one unrecognised block and was
+covered end to end — friends' posts included.
+
+So every landmark is found by **shape** first, with the words as a second opinion: the
+site's two bars are rows of equal-height controls flush with an edge, the stories tray is
+a row of equal tiles above the first post, and a post header is a small square at the left
+margin with a name beside it. Shape is what all the translations have in common. The words
+that remain are listed per language at the top of `ChromeAnalyzer.kt` — English and Russian
+today — and a page in a language it has never seen still reads, which a Spanish fixture
+holds it to.
+
+The top bar is grown by overlap rather than by proximity, which is subtler than it sounds
+and cost a release: taking "the lowest edge of anything short near the top" swallowed the
+first post's avatar once the stories row had scrolled under the sticky header, and the
+feed region then started below the post it was meant to judge.
 
 ### LinkedIn
 
@@ -205,10 +240,20 @@ Grouping is easier than Instagram (one child of the lazy column is one post) but
 signal is a string: the connection degree (`• 1st`, `• 3rd+`), `Follow <name>`,
 `<name> commented`, `Because you recently followed <name>`.
 
-**So the LinkedIn side is English-only.** That is a real regression against the browser
-extension, which classifies LinkedIn structurally and works in any language. The strings
-are collected at the top of `LinkedInAnalyzer.kt` so translating is one object, but until
-LinkedIn exposes ids there is no honest way around it.
+**So the LinkedIn side only knows the languages it has been taught** — English and
+Russian. That is a real regression against the browser extension, which classifies
+LinkedIn structurally and works in any language; the strings are collected at the top of
+`LinkedInAnalyzer.kt` so a third language is one object, but until LinkedIn exposes ids
+there is no honest way around it.
+
+Which makes the fail-*open* path the one to watch. A capture from a phone running LinkedIn
+in Russian matched none of the English signals — "X liked this" is "X отметил(а), что
+нравится этот контент" — and every post came back KEEP anyway, because the loose author
+guess read "13 ч." out of a timestamp, and a post with an author and no follow control is
+taken to be someone you know. Keeping a post now insists on an author read from a "view
+profile" label, which is a sentence about a person rather than any string with a bullet in
+it. An unrecognised language costs a covered feed, which is visible and fixable, rather
+than an uncovered one, which is not.
 
 ### Scrolling
 
@@ -385,8 +430,8 @@ allowed to see sends an event. Turning it off is the accessibility toggle, nothi
 
 ## Tests
 
-125 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
-interface rather than `AccessibilityNodeInfo`, so they can be run against 60 UI trees
+145 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+interface rather than `AccessibilityNodeInfo`, so they can be run against 66 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
 
@@ -423,7 +468,7 @@ adb shell settings put secure enabled_accessibility_services dev.amishutkin.slop
 adb shell settings put secure accessibility_enabled 1
 ```
 
-The most useful tests are the corpus invariants, which hold over all 60 screens rather
+The most useful tests are the corpus invariants, which hold over all 66 screens rather
 than expectations about one of them — in particular that **everything not explicitly
 kept ends up covered**, and that **no capture ever has its navigation bar painted over**.
 
@@ -435,8 +480,8 @@ reproduced. The shape rule covers the shelf in it; the old word rule covered not
 
 Being specific, because the gaps matter more than the features:
 
-- **Ad detection is unverified.** No sponsored post appeared in 34 Instagram screens or
-  8 LinkedIn ones — the recon account was new and had no ad profile. The Instagram ad
+- **Ad detection is unverified.** No sponsored post appeared in 35 Instagram screens or
+  15 LinkedIn ones — the recon account was new and had no ad profile. The Instagram ad
   path is a string match written from the docs and has never matched anything real. It
   is the one word-match in `InstagramAnalyzer.kt`, and it is marked as such.
 - **The YouTube Shorts shelf rule is a shape rule, and shapes are not proofs.** Two or
@@ -455,7 +500,13 @@ Being specific, because the gaps matter more than the features:
   children into one post) and is the largest thing still outstanding.
 - **LinkedIn cannot be re-verified on the emulator.** That account was restricted after
   being driven with scripted input; see the note in this file's history. It is covered by
-  12 captured screens plus the phone reports.
+  15 captured screens plus the phone reports.
+- **The guard against a half-drawn frame is a heuristic.** Instagram sometimes rebuilds
+  the feed under the reader, and for a frame or two the posts have no headers — which
+  reads as "nothing here is a post" and paints the screen white while it stands still. A
+  scan on an unmoved screen that keeps less than a quarter of what the last one kept is
+  now disbelieved and retried once. That also disbelieves the one frame after you really
+  do unfollow everything on screen, which costs a frame and nothing else.
 - **The stories row is kept**, in the app and on the web alike: those are people you
   followed on purpose.
 - **The web feed leaves a thin strip below the site header uncovered** — the region
@@ -486,7 +537,7 @@ app/src/main/java/dev/amishutkin/slopsick/
               that is tested
   platform/   the accessibility service, the overlay window, the settings store
   ui/         one settings screen
-app/src/test/ the tests, and 60 anonymised device captures
+app/src/test/ the tests, and 66 anonymised device captures
 tools/        the anonymiser
 ```
 
