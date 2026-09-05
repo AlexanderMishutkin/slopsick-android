@@ -180,6 +180,14 @@ class SlopsickAccessibilityService : AccessibilityService() {
      * Whether this scan has lost sight of a feed the last one could read, without the
      * screen having moved. Only ever true once in a row: [blindFrames] makes the second
      * such frame authoritative, so a feed that genuinely emptied is still covered.
+     *
+     * Measured as how much of the screen the scan is willing to leave uncovered. An
+     * earlier version asked whether the frame recognised *anything*, which missed the
+     * case that actually shows: Instagram quietly refreshing the feed under you, one post
+     * losing its header for a frame while the others keep theirs. Nothing scrolled,
+     * plenty was still recognised, and the post you were reading went white and came
+     * back. Losing three quarters of what was kept a moment ago, on a screen that has not
+     * moved, is a half-built tree far more often than it is the truth.
      */
     private fun blind(next: FeedScan): Boolean {
         if (blindFrames > 0) return false
@@ -187,10 +195,13 @@ class SlopsickAccessibilityService : AccessibilityService() {
         if (previous.surface != next.surface || next.surface != Surface.FEED) return false
         if (SystemClock.uptimeMillis() - lastScrollAt < SETTLE_MS) return false
         if (previous.feedBounds != next.feedBounds) return false
-        val knewSomething = previous.items.any { it.verdict != Verdict.UNKNOWN }
-        val knowsNothing = next.items.none { it.verdict != Verdict.UNKNOWN }
-        return knewSomething && knowsNothing
+        val was = keptHeight(previous)
+        return was > 0 && keptHeight(next) * COLLAPSE < was
     }
+
+    /** How much of the feed a scan decided to leave visible. */
+    private fun keptHeight(scan: FeedScan): Int =
+        scan.items.filter { it.verdict == Verdict.KEEP }.sumOf { it.bounds.height }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -550,6 +561,9 @@ class SlopsickAccessibilityService : AccessibilityService() {
          * that cuts the holes, rather than a round trip later.
          */
         const val SETTLE_MS = 90L
+
+        /** A frame keeping less than this fraction of what the last one kept is suspect. */
+        const val COLLAPSE = 4
 
         /** Rescans after entering an app, while the feed is still being built. */
         val SETTLE_LADDER = longArrayOf(150L, 350L, 700L, 1200L, 2000L)

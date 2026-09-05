@@ -110,4 +110,26 @@ class InstagramAnalyzerTest {
         val empty = InstagramAnalyzer.analyze(XmlUiNode.fixture("liscroll-01.xml"))
         assertTrue(!empty.hasFeed && empty.items.isEmpty())
     }
+    /**
+     * The line Instagram draws where the feed you chose ends and its recommendations
+     * begin. It was being swept into the "everything above the first post" fragment and
+     * painted over, which left no way to tell a filter that is working from a feed that
+     * has gone blank — the reader's own reason for wanting it back.
+     */
+    @Test
+    fun `the caught-up line is left visible, and the recommendations under it are not`() {
+        val scan = InstagramAnalyzer.analyze(XmlUiNode.fixture("igcaughtup.xml"))
+        val line = scan.items.single { it.reason == Reason.FEED_MODULE }
+        assertEquals(Verdict.KEEP, line.verdict)
+        assertEquals("from the top of its card", 715, line.bounds.top)
+        assertEquals("down to the bottom of the bar, not the heading under it", 877, line.bounds.bottom)
+
+        val suggested = scan.items.single { it.reason == Reason.SUGGESTED }
+        assertEquals(Verdict.HIDE, suggested.verdict)
+        assertEquals(1055, suggested.bounds.top)
+
+        val cover = OverlayPlan.cover(scan)
+        assertTrue("nothing is painted over it", cover.none { it.verticalOverlap(line.bounds) > 0 })
+        assertTrue("the heading below it still is", cover.any { it.top == 877 })
+    }
 }

@@ -15,6 +15,32 @@ class SettingsStore(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
+    init {
+        migrate()
+    }
+
+    /**
+     * Brings a saved settings file up to the current build's defaults.
+     *
+     * A default only ever applies to someone who has never saved their settings, so
+     * changing one leaves everybody who has opened the settings screen once on the old
+     * value — with no way to tell, from inside the app, that they are on it. That is how
+     * "hide posts your network only reacted to" could be switched on by default in one
+     * build and still be off on a phone three builds later, looking for all the world
+     * like an analyzer that could not read the post.
+     *
+     * A migration runs once per step and is not a lock: the switch is in the settings
+     * screen and turning it off afterwards sticks.
+     */
+    private fun migrate() {
+        val from = prefs.getInt(SCHEMA, 0)
+        if (from >= SCHEMA_VERSION) return
+        val edit = prefs.edit()
+        // 1: hiding what your network merely liked or commented on became the default.
+        if (from < 1) edit.putBoolean(HIDE_ACTIVITY, true)
+        edit.putInt(SCHEMA, SCHEMA_VERSION).apply()
+    }
+
     fun load() = Settings(
         instagram = prefs.getBoolean(INSTAGRAM, true),
         linkedIn = prefs.getBoolean(LINKEDIN, true),
@@ -33,6 +59,7 @@ class SettingsStore(context: Context) {
 
     fun save(settings: Settings) {
         prefs.edit()
+            .putInt(SCHEMA, SCHEMA_VERSION)
             .putBoolean(INSTAGRAM, settings.instagram)
             .putBoolean(LINKEDIN, settings.linkedIn)
             .putBoolean(YOUTUBE, settings.youtube)
@@ -61,6 +88,10 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val NAME = "slopsick.settings"
+
+        /** Bump when a default changes, and add the step to [migrate]. */
+        const val SCHEMA_VERSION = 1
+        const val SCHEMA = "schema"
         const val INSTAGRAM = "app_instagram"
         const val LINKEDIN = "app_linkedin"
         const val YOUTUBE = "app_youtube"

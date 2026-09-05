@@ -23,6 +23,15 @@ object InstagramAnalyzer {
     private const val FOLLOW_BUTTON = "inline_follow_button"
     private const val PROFILE_NAME = "row_feed_photo_profile_name"
     private const val STORIES_TRAY = "reels_tray_container"
+
+    /**
+     * "You have seen all new posts" — the line Instagram draws where the feed you chose
+     * ends and its recommendations begin. Kept, on request: it is the one thing on the
+     * screen that says the filter is working rather than broken, and covering it made a
+     * working filter look like a feed that had simply gone blank. Only the bar itself is
+     * kept; the "Suggested for you" heading below it is still the algorithm talking.
+     */
+    private const val DEMARCATOR = "demarcator_bar_container"
     private const val ACTION_BAR = "main_feed_action_bar"
     private const val TAB_BAR = "tab_bar"
     private const val REELS_TAB = "clips_tab"
@@ -107,16 +116,19 @@ object InstagramAnalyzer {
 
         val children = list.children
         val headerAt = children.indices.filter { children[it].containsId(HEADER) }
+        // The caught-up line divides the feed as firmly as a post header does, and can
+        // turn up on either side of one, so it breaks the grouping the same way.
+        val demarcatorAt = children.indices.filter { children[it].containsId(DEMARCATOR) }
+        val breaks = (headerAt + demarcatorAt).distinct().sorted()
 
         val items = mutableListOf<FeedItem>()
 
-        // Everything above the first header is the tail of a post whose header has
+        // Everything above the first break is the tail of a post whose header has
         // scrolled off the top, plus possibly the stories row. The tail is emitted as one
         // item rather than one per child: it is a single post, and splitting it would let
         // the ledger resolve half of it and cover the rest.
-        val firstHeader = headerAt.firstOrNull() ?: children.size
         var pending: Bounds? = null
-        for (i in 0 until firstHeader) {
+        for (i in 0 until (breaks.firstOrNull() ?: children.size)) {
             val child = children[i]
             if (child.bounds.isEmpty) continue
             if (child.containsId(STORIES_TRAY)) {
@@ -133,9 +145,14 @@ object InstagramAnalyzer {
         }
         pending?.let { items += FeedItem(it, Verdict.UNKNOWN, Reason.OFF_SCREEN_HEADER) }
 
-        for ((n, start) in headerAt.withIndex()) {
-            val end = headerAt.getOrNull(n + 1) ?: children.size
+        for ((n, start) in breaks.withIndex()) {
+            val end = breaks.getOrNull(n + 1) ?: children.size
             val span = children.subList(start, end)
+            val caughtUp = caughtUpLine(children[start])
+            if (caughtUp != null) {
+                items += FeedItem(caughtUp, Verdict.KEEP, Reason.FEED_MODULE)
+                continue
+            }
             val bounds = span.map { it.bounds }.filterNot { it.isEmpty }
                 .reduceOrNull { a, b -> a.union(b) } ?: continue
             items += classify(span, bounds, settings)
@@ -176,6 +193,16 @@ object InstagramAnalyzer {
     }
 
     private fun verdictFor(hide: Boolean) = if (hide) Verdict.HIDE else Verdict.KEEP
+
+    /**
+     * The caught-up line inside [child], from the top of its card down to the bottom of
+     * the bar. Taking the card's top rather than the bar's own leaves no stripe of
+     * padding to paint above it, which at that height would be pure noise.
+     */
+    private fun caughtUpLine(child: UiNode): Bounds? {
+        val bar = child.findById(DEMARCATOR)?.bounds?.takeIf { !it.isEmpty } ?: return null
+        return Bounds(child.bounds.left, child.bounds.top, child.bounds.right, bar.bottom)
+    }
 
     private fun authorOf(header: UiNode): String? {
         header.findById(PROFILE_NAME)?.text?.replace('\u00a0', ' ')?.trim()

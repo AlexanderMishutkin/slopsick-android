@@ -48,6 +48,8 @@ NAME_PATTERNS = [
     re.compile(r'^(.+?), профиль Подтверждено'),
     re.compile(r'^(.+?), В поиске работы'),
     re.compile(r'^(.+?)\s+•\s*\d'),
+    re.compile(r'^Подписаться на (.+)$'),
+    re.compile(r'в этом месте: (.+?),'),
 ]
 # "by X," can catch ordinary prose, so it stays shape-guarded; everything above is
 # unambiguously an identity, whatever characters the person put in their display name.
