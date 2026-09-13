@@ -430,8 +430,8 @@ allowed to see sends an event. Turning it off is the accessibility toggle, nothi
 
 ## Tests
 
-145 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
-interface rather than `AccessibilityNodeInfo`, so they can be run against 66 UI trees
+158 JVM tests, no device or emulator needed. The analyzers work against a `UiNode`
+interface rather than `AccessibilityNodeInfo`, so they can be run against 73 UI trees
 captured from real devices with `uiautomator dump` — the same trick the browser
 extension uses with jsdom.
 
@@ -442,6 +442,12 @@ capture more:
 ```
 python3 tools/anonymize.py <dir-of-dumps> app/src/test/resources/fixtures
 ```
+
+Some screens are identity all the way down — a profile page is a grid where every tile is
+captioned with whoever posted it, over a bio, a city and an employer. There is no sentence
+shape to match there, and one missed line is a real person in a public repository, so when
+the rule under test reads ids and geometry only, `--structure-only` commits the tree with
+every string removed. The three `igprofile-*` captures are that.
 
 Some rules cannot be expressed by a captured screen — `uiautomator dump` cannot read
 Reels at all, because it waits for a window that stops changing and an autoplaying video
@@ -468,7 +474,7 @@ adb shell settings put secure enabled_accessibility_services dev.amishutkin.slop
 adb shell settings put secure accessibility_enabled 1
 ```
 
-The most useful tests are the corpus invariants, which hold over all 66 screens rather
+The most useful tests are the corpus invariants, which hold over all 73 screens rather
 than expectations about one of them — in particular that **everything not explicitly
 kept ends up covered**, and that **no capture ever has its navigation bar painted over**.
 
@@ -507,6 +513,14 @@ Being specific, because the gaps matter more than the features:
   scan on an unmoved screen that keeps less than a quarter of what the last one kept is
   now disbelieved and retried once. That also disbelieves the one frame after you really
   do unfollow everything on screen, which costs a frame and nothing else.
+- **LinkedIn loses the author when a post scrolls.** Compose drops the whole header
+  subtree once it passes the top of the list, so a post that is 90% on screen and
+  perfectly readable carries no name, no degree marker and no follow control — nothing to
+  judge by, so it is covered. The ledger cannot rescue it either: with no identifiable
+  post anywhere on screen there is nothing to measure the scroll against. Reported from
+  the phone, and the honest fix — inheriting a verdict from the last frame using the
+  scroll distance the events report — is also the one that would uncover a suggestion if
+  it ever guessed wrong.
 - **The stories row is kept**, in the app and on the web alike: those are people you
   followed on purpose.
 - **The web feed leaves a thin strip below the site header uncovered** — the region
@@ -537,7 +551,7 @@ app/src/main/java/dev/amishutkin/slopsick/
               that is tested
   platform/   the accessibility service, the overlay window, the settings store
   ui/         one settings screen
-app/src/test/ the tests, and 66 anonymised device captures
+app/src/test/ the tests, and 73 anonymised device captures
 tools/        the anonymiser
 ```
 

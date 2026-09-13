@@ -1,6 +1,7 @@
 package dev.amishutkin.slopsick.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -131,5 +132,40 @@ class InstagramAnalyzerTest {
         val cover = OverlayPlan.cover(scan)
         assertTrue("nothing is painted over it", cover.none { it.verticalOverlap(line.bounds) > 0 })
         assertTrue("the heading below it still is", cover.any { it.top == 877 })
+    }
+
+    @Test
+    fun `a profile page is not the feed, and none of it is covered`() {
+        // A profile's post grid is a RecyclerView carrying the id `list` — the same id the
+        // home feed's list carries. Three bug reports off the phone were somebody's whole
+        // profile under one cover, because a grid of thumbnails has no post headers in it.
+        for (capture in listOf("igprofile-01.xml", "igprofile-02.xml", "igprofile-03.xml")) {
+            val result = scan(capture)
+            assertFalse(capture, result.hasFeed)
+            assertTrue(capture, OverlayPlan.cover(result).isEmpty())
+            assertEquals(capture, Surface.OTHER, result.surface)
+        }
+    }
+
+    @Test
+    fun `a post whose header has scrolled off is not taken for a friend's`() {
+        // Reported as "left something visible that should be hidden". The post at the top
+        // is a suggestion — its header still says so — but the header is half off screen,
+        // Instagram has stopped reporting the follow button, and a missing follow button
+        // is the whole basis for calling a post a friend's.
+        val result = scan("igkept-01.xml")
+        val top = result.items.first()
+        assertEquals(Verdict.UNKNOWN, top.verdict)
+        assertEquals(Reason.OFF_SCREEN_HEADER, top.reason)
+        // The identity survives, so the ledger can still recognise it from an earlier frame.
+        assertEquals("Gus Tanner", top.author)
+        assertTrue(OverlayPlan.cover(result).any { it.top <= 138 })
+    }
+
+    @Test
+    fun `a header fully on screen is still read as a friend's post`() {
+        // The other half of the rule above: this must not turn every post into UNKNOWN.
+        val post = scan("igscroll-01.xml").items.single { it.reason == Reason.FOLLOWED }
+        assertEquals(Verdict.KEEP, post.verdict)
     }
 }

@@ -1,6 +1,7 @@
 package dev.amishutkin.slopsick.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -159,5 +160,15 @@ class LinkedInAnalyzerTest {
         val item = LinkedInAnalyzer.analyze(screen).items.single()
         assertEquals(Verdict.UNKNOWN, item.verdict)
         assertEquals(Reason.NO_SIGNAL, item.reason)
+    }
+
+    @Test
+    fun `nothing is painted while the navigation drawer is open`() {
+        // Reported from the phone as "I can't reach my own profile". The verdicts were
+        // right and the feed was still there in the tree — behind a drawer holding the
+        // profile, the settings and every other way out of the app.
+        val result = LinkedInAnalyzer.analyze(XmlUiNode.fixture("lidrawer-01.xml"))
+        assertFalse(result.hasFeed)
+        assertTrue(OverlayPlan.cover(result).isEmpty())
     }
 }

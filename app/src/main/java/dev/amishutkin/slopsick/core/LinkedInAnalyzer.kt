@@ -32,6 +32,17 @@ object LinkedInAnalyzer {
     private const val BOTTOM_BAR = "home_bottom_bar"
 
     /**
+     * The navigation drawer, slid out over the feed. The feed is still in the tree behind
+     * it, still on the feed tab, still perfectly analysable — and painting its verdicts
+     * puts covers over the panel in front, which is where your own profile, your settings
+     * and the way to everything else live. Reported from the phone as "I can't reach my
+     * own profile"; the covers were correct and drawn over the wrong screen.
+     *
+     * Present only when the drawer is open: none of the 15 captured LinkedIn feeds has it.
+     */
+    private val DRAWER = listOf("home_nav_panel_fragment", "home_drawer_frame")
+
+    /**
      * Every LinkedIn tab is a lazy column — Jobs and Search look exactly like the feed
      * from the tree's point of view. Which tab is current is the only thing that tells
      * them apart, and job listings are not the feed's idea of what you should look at.
@@ -108,6 +119,11 @@ object LinkedInAnalyzer {
         if (!settings.linkedIn) return FeedScan.none(TargetApp.LINKEDIN)
         val feedTab = root.findById(FEED_TAB)?.takeIf { it.selected }
             ?: return FeedScan.none(TargetApp.LINKEDIN)
+        // Something is open in front of the feed. Whatever the feed says, it is not what
+        // the reader is looking at, and it is not ours to paint over.
+        if (DRAWER.any { id -> root.walk().any { it.hasId(id) && !it.bounds.isEmpty } }) {
+            return FeedScan.none(TargetApp.LINKEDIN)
+        }
 
         val column = root.walk().firstOrNull { it.viewId?.endsWith(LAZY_COLUMN) == true }
             ?: return FeedScan.none(TargetApp.LINKEDIN)

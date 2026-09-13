@@ -12,6 +12,7 @@ import dev.amishutkin.slopsick.R
 import dev.amishutkin.slopsick.core.Bounds
 import dev.amishutkin.slopsick.core.ChromeAnalyzer
 import dev.amishutkin.slopsick.core.FeedLedger
+import dev.amishutkin.slopsick.core.ScrollReading
 import dev.amishutkin.slopsick.core.FeedScan
 import dev.amishutkin.slopsick.core.InstagramAnalyzer
 import dev.amishutkin.slopsick.core.LinkedInAnalyzer
@@ -301,10 +302,16 @@ class SlopsickAccessibilityService : AccessibilityService() {
     private fun scrollDeltaOf(event: AccessibilityEvent): Int? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
         val dy = event.scrollDeltaY
+        // Swiping a carousel sideways is a scroll event like any other, and the feed has
+        // not moved an inch: the covers still fit exactly where they are. Reading only
+        // the vertical delta answered "distance unknown", and the fallback for unknown is
+        // to cover the whole feed — so opening a carousel whitened the post being read.
+        if (ScrollReading.sideways(event.scrollDeltaX, dy)) return 0
         if (dy == 0 || dy == UNSET_DELTA) return null
         val limit = lastScan?.safe?.height ?: lastScan?.feedBounds?.height ?: return null
         return dy.takeIf { abs(it) <= limit }
     }
+
 
     /**
      * How long after the last event to scan. Chrome has to build an accessibility tree
@@ -572,7 +579,7 @@ class SlopsickAccessibilityService : AccessibilityService() {
         const val MAX_MISSES = 3
 
         /** What [AccessibilityEvent.getScrollDeltaY] returns when the view did not set it. */
-        const val UNSET_DELTA = -1
+        const val UNSET_DELTA = ScrollReading.UNSET
 
         /** How long the report buttons stay down before the screenshot is taken. */
         const val SHUTTER_MS = 80L

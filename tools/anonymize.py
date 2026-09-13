@@ -50,7 +50,25 @@ NAME_PATTERNS = [
     re.compile(r'^(.+?)\s+•\s*\d'),
     re.compile(r'^Подписаться на (.+)$'),
     re.compile(r'в этом месте: (.+?),'),
+    # A profile's post grid. Every tile is captioned with the account that posted it,
+    # followed by its place in the grid: "Видео Reels <name> в строке 2, столбце 1".
+    re.compile(r'^Видео Reels (.+?)(?: в строке |$)'),
+    re.compile(r'^Фото (?!профиля|с вами)(.+?)(?: в строке |$)'),
+    re.compile(r'^\d+ фото пользователя (.+?)(?: в строке |$)'),
+    re.compile(r'^Просмотреть компанию: (.+)$'),
+    re.compile(r'^(.+?) Подтверждено$'),
 ]
+
+# Nodes whose text *is* a person, with no sentence around it to match on. LinkedIn's
+# navigation drawer is the reason: it holds your own name, employer and city as three
+# bare strings.
+NAME_IDS = (
+    '/identity_mirror_component_profile_name',
+    '/identity_mirror_component_experience',
+    '/identity_mirror_component_location',
+    '/profile_header_full_name_above_vanity',
+    '/profile_header_full_name',
+)
 # "by X," can catch ordinary prose, so it stays shape-guarded; everything above is
 # unambiguously an identity, whatever characters the person put in their display name.
 LOOSE_NAME_PATTERNS = [
@@ -60,6 +78,7 @@ LOOSE_NAME_PATTERNS = [
 ]
 
 LONG_TEXT = 90          # anything longer is treated as post body / bio
+SHORT_PROSE = 30        # ...and anything past this that reads as prose, not a label
 FAKE_HANDLES = ['aurora.pics','beacon_news','citrus.club','delta_lab','ember.studio',
                 'fable_co','granite.works','harbor_daily','indigo.set','juniper_tv',
                 'kestrel.io','lumen_press','marlow.art','nimbus_news','onyx.studio']
@@ -86,10 +105,13 @@ def collect(paths):
         for n in root.iter('node'):
             if skip(n):
                 continue
+            rid = n.attrib.get('resource-id', '')
             for k in ('text', 'content-desc'):
                 v = (n.attrib.get(k) or '').replace('\xa0', ' ').strip()
                 if not v:
                     continue
+                if k == 'text' and any(rid.endswith(i) for i in NAME_IDS):
+                    names.setdefault(v, None)
                 for rx in HANDLE_PATTERNS:
                     m = rx.match(v)
                     if m:
@@ -123,13 +145,28 @@ def scrub(value, handles, names):
     for real, fake in sorted(handles.items(), key=lambda kv: -len(kv[0])):
         out = re.sub(r'(?<![A-Za-z0-9._])' + re.escape(real) + r'(?![A-Za-z0-9._])', fake, out)
     stripped = out.replace('\xa0', ' ').strip()
-    if len(stripped) > LONG_TEXT:
+    # Long text is post body or bio. So is shorter text that is truncated with an ellipsis
+    # or runs to a second line — a headline, a caption, the first line of a post. Interface
+    # labels are neither: they are short, single-line and complete. That distinction is
+    # what keeps a stranger's prose out of a public repository when no name appears in it
+    # for the patterns above to catch.
+    prose = len(stripped) > LONG_TEXT or (
+        len(stripped) > SHORT_PROSE and ('\u2026' in stripped or '\n' in stripped)
+    )
+    if prose:
         out = f'[body text, {len(stripped)} chars]'
     return out
 
 
 def main():
-    src, dst = sys.argv[1], sys.argv[2]
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    # Some screens are identity all the way down. A profile page is a grid where every
+    # tile is captioned with who posted it, over a bio, a city and an employer — there is
+    # no sentence shape to match, and one missed line is a real person published to a
+    # public repository. Where the rule under test reads ids and geometry only, the
+    # honest fixture is the structure with every string removed.
+    structure_only = '--structure-only' in sys.argv
+    src, dst = args[0], args[1]
     paths = sorted(glob.glob(os.path.join(src, '*.xml')))
     handles, names = collect(paths)
     os.makedirs(dst, exist_ok=True)
@@ -140,9 +177,11 @@ def main():
                 continue
             for k in ('text', 'content-desc'):
                 if k in n.attrib:
-                    n.attrib[k] = scrub(n.attrib[k], handles, names)
+                    n.attrib[k] = '' if structure_only else scrub(n.attrib[k], handles, names)
         tree.write(os.path.join(dst, os.path.basename(p)), encoding='utf-8', xml_declaration=True)
-    print(f'{len(paths)} files, {len(handles)} handles, {len(names)} names replaced')
+    how = 'stripped of all text' if structure_only else \
+        f'{len(handles)} handles, {len(names)} names replaced'
+    print(f'{len(paths)} files, {how}')
 
 if __name__ == '__main__':
     main()

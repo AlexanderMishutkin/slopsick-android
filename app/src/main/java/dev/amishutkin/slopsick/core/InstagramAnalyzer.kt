@@ -42,6 +42,16 @@ object InstagramAnalyzer {
      */
     private const val REELS_VIEWER = "clips_viewer_container"
 
+    /**
+     * A profile screen's own chrome. This matters more than it looks: a profile's post
+     * grid is a `RecyclerView` carrying the id `list` — the same id the home feed's list
+     * carries — so "find the feed" found it, no post headers existed in a grid of
+     * thumbnails, and the whole of somebody's profile went under one cover. Three bug
+     * reports off the phone were this, and none of the 35 captured feeds carries any of
+     * these ids.
+     */
+    private val PROFILE_CHROME = listOf("profile_action_bar", "profile_header_container")
+
     /** The search bar at the top of Explore; also the surest sign that this is Explore. */
     private const val EXPLORE_BAR = "explore_action_bar"
     private const val EXPLORE_GRID = "recycler_view"
@@ -85,6 +95,13 @@ object InstagramAnalyzer {
                     barless = chrome.barless,
                 )
             }
+        }
+
+        // A profile is somewhere you navigated on purpose, and nothing on it was chosen
+        // for you. Checked before Explore because a profile parked in a pager can carry
+        // Explore's own ids off-screen beside it.
+        if (isProfile(root)) {
+            return FeedScan.none(TargetApp.INSTAGRAM).copy(blockers = blockers)
         }
 
         // Explore is a grid of things the algorithm picked, top to bottom. The search bar
@@ -155,7 +172,7 @@ object InstagramAnalyzer {
             }
             val bounds = span.map { it.bounds }.filterNot { it.isEmpty }
                 .reduceOrNull { a, b -> a.union(b) } ?: continue
-            items += classify(span, bounds, settings)
+            items += classify(span, bounds, content, settings)
         }
 
         return FeedScan(
@@ -170,7 +187,12 @@ object InstagramAnalyzer {
         )
     }
 
-    private fun classify(span: List<UiNode>, bounds: Bounds, settings: Settings): FeedItem {
+    private fun classify(
+        span: List<UiNode>,
+        bounds: Bounds,
+        content: Bounds,
+        settings: Settings,
+    ): FeedItem {
         val header = span.firstNotNullOfOrNull { it.findById(HEADER) }
         val author = header?.let { authorOf(it) }
         // "<author> posted a carousel 7 days ago" — stable for as long as the post is in
@@ -189,10 +211,28 @@ object InstagramAnalyzer {
             return FeedItem(bounds, verdictFor(settings.hideSuggested), Reason.SUGGESTED, author, identity)
         }
 
+        // The whole Instagram rule is that a *missing* follow button means you follow the
+        // author. That only holds while the header is fully on screen. Scroll one halfway
+        // off and Instagram stops reporting the button — the header's own bounds come back
+        // inverted, bottom above top — so a suggestion reads as a post from a friend and
+        // is uncovered. A phone report caught exactly that: the header still said
+        // "Suggested for you" in its secondary label while the post was kept.
+        //
+        // Nothing can be concluded from a clipped header, so nothing is: the item keeps
+        // its identity and goes back UNKNOWN, which covers it, and the ledger uncovers it
+        // again if it saw this same post whole a moment ago.
+        if (header != null && clipped(header.bounds, content)) {
+            return FeedItem(bounds, Verdict.UNKNOWN, Reason.OFF_SCREEN_HEADER, author, identity)
+        }
+
         return FeedItem(bounds, Verdict.KEEP, Reason.FOLLOWED, author, identity)
     }
 
     private fun verdictFor(hide: Boolean) = if (hide) Verdict.HIDE else Verdict.KEEP
+
+    /** Whether a header is cut off at the top of the feed, or reports impossible bounds. */
+    private fun clipped(header: Bounds, content: Bounds): Boolean =
+        header.isEmpty || header.top < content.top
 
     /**
      * The caught-up line inside [child], from the top of its card down to the bottom of
@@ -224,6 +264,14 @@ object InstagramAnalyzer {
         )
         return chrome.clamp(region)
     }
+
+    /**
+     * Whether a profile screen is on display. Bounds are checked, not just presence:
+     * Instagram parks whole screens off to the side of the visible one, and an id with
+     * impossible bounds is a screen you are not looking at.
+     */
+    private fun isProfile(root: UiNode): Boolean =
+        root.walk().any { node -> PROFILE_CHROME.any { node.hasId(it) } && !node.bounds.isEmpty }
 
     private fun findFeedList(root: UiNode): UiNode? =
         root.walk().firstOrNull {
