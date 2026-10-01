@@ -6,4 +6,14 @@
     <!-- The backdrop of the logo artwork, so the adaptive layers blend. -->
     <color name="ic_launcher_background">#2F2F2F</color>
     <color name="cover">#111517</color>
+    <!-- The off state has to read as an alarm, not as a label. A filter that has been
+         switched off by something other than you looks exactly like one that is working:
+         every switch on this screen is still on.
+
+         Solid, not a tint. The theme is DeviceDefault, so on a phone with Material You the
+         window background is mixed from the wallpaper and can be any pale colour it likes —
+         the first try here was a pale red card that turned out to be invisible against a
+         pale pink window. A card that only shows up on some wallpapers is not a warning. -->
+    <color name="alarm">#B3261E</color>
+    <color name="alarm_text">#FFFFFF</color>
 </resources>

@@ -4,6 +4,32 @@ Versions are what was actually installed on a phone. Every release from 1.1.1 on
 exists because something on that phone was wrong and the 👎 button said so, which is why
 each entry names the failure rather than the feature.
 
+## 1.1.9 — 2026-10-01
+
+Reported as "app suddenly stopped working — I mean it works, but nothing at all is
+covered". Nothing was wrong with the app. Android had switched the accessibility service
+off: `enabled_accessibility_services` was empty, and so was every other accessibility
+service on the phone. No crash, no hibernation, still in the battery whitelist, and no
+reboot in 28 days. The per-setting timestamps live in a root-only file, so there is no
+saying exactly when it happened, which is most of the problem.
+
+- **Off is now a warning, not a label.** The settings screen already read the system's own
+  list and already said "Filtering is off" — it just said it in body text above four
+  switches that all still read *on*, because those are this app's settings and the service
+  is Android's to grant. The screen was open five minutes before the report and the line
+  did not register. Off is now a solid red card over the whole status block, headed
+  "Nothing is being covered", and it re-checks every 20 seconds while open, so the screen
+  cannot be the last thing still claiming the filter is alive.
+- **The card is painted, not tinted.** The first attempt was a pale red wash, which on a
+  phone whose theme mixes its window background from the wallpaper turned out to be a pale
+  pink card on a pale pink window. A warning that only shows up on some wallpapers is not
+  a warning.
+- **The service leaves a dated note that it was running**, every 15 minutes, in its own
+  preferences file so it does not trip the settings listener and cause a rescan. When
+  access is gone the screen says how long ago something was last covered. Nothing here can
+  restore the access — that needs a system permission this app will not ask for — so the
+  most it can do is make the gap measurable next time.
+
 ## 1.1.7 — 2026-09-13
 
 - **A profile page is not the feed.** A profile's post grid is a `RecyclerView` carrying

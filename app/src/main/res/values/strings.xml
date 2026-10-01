@@ -6,8 +6,9 @@
     <string name="service_description">Reads the screen in Instagram, LinkedIn and YouTube so it can cover posts and videos you did not choose to see. Nothing is sent anywhere: the app has no internet permission.</string>
 
     <string name="status_on">Filtering is on</string>
-    <string name="status_off">Filtering is off</string>
-    <string name="status_off_hint">SLOPSICK needs accessibility access to read what is on screen. Turn it on under Installed apps.</string>
+    <string name="status_off">Nothing is being covered</string>
+    <string name="status_off_hint">SLOPSICK needs accessibility access to read what is on screen. Turn it on under Installed apps. Android can switch this off on its own \u2014 after a system update, or when the phone decides the app is idle \u2014 and the switches below will keep saying on regardless.</string>
+    <string name="status_off_since">Last covered something %1$s.</string>
     <string name="open_settings">Open accessibility settings</string>
 
     <string name="section_apps">Apps</string>

@@ -7,6 +7,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings as AndroidSettings
 import android.text.TextUtils
+import android.text.format.DateUtils
+import android.view.View
 import android.widget.Button
 import android.widget.CompoundButton
 import android.widget.NumberPicker
@@ -22,7 +24,9 @@ import java.util.concurrent.TimeUnit
 class MainActivity : Activity() {
 
     private lateinit var store: SettingsStore
+    private lateinit var statusBox: View
     private lateinit var status: TextView
+    private lateinit var statusSince: TextView
     private lateinit var statusHint: TextView
     private lateinit var lockStatus: TextView
     private lateinit var lockMinutes: NumberPicker
@@ -34,6 +38,9 @@ class MainActivity : Activity() {
     private val tick = object : Runnable {
         override fun run() {
             showLock()
+            // Access can be revoked while this screen is open, and the screen should not
+            // be the last thing still claiming the filter is running.
+            showStatus(isServiceEnabled())
             ticker.postDelayed(this, TimeUnit.SECONDS.toMillis(20))
         }
     }
@@ -43,7 +50,9 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         store = SettingsStore(this)
 
+        statusBox = findViewById(R.id.statusBox)
         status = findViewById(R.id.status)
+        statusSince = findViewById(R.id.statusSince)
         statusHint = findViewById(R.id.statusHint)
         lockStatus = findViewById(R.id.lockStatus)
 
@@ -72,9 +81,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        val enabled = isServiceEnabled()
-        status.setText(if (enabled) R.string.status_on else R.string.status_off)
-        statusHint.visibility = if (enabled) TextView.GONE else TextView.VISIBLE
+        showStatus(isServiceEnabled())
         showSettings(store.load())
         ticker.removeCallbacks(tick)
         ticker.post(tick)
@@ -83,6 +90,46 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         ticker.removeCallbacks(tick)
+    }
+
+    /**
+     * The one thing on this screen worth shouting about.
+     *
+     * Every switch below says "on" whether or not the service is running, because they are
+     * this app's own settings and the service is Android's to grant. So an app that had
+     * been covering nothing for eighteen days still looked, at a glance, like one that was
+     * working. Off is now a tinted card and a date, not a line of body text.
+     */
+    private fun showStatus(enabled: Boolean) {
+        status.setText(if (enabled) R.string.status_on else R.string.status_off)
+        statusBox.setBackgroundColor(
+            getColor(if (enabled) android.R.color.transparent else R.color.alarm),
+        )
+        // On, the heading is the theme's own text colour on the theme's own background.
+        // Off, the whole card is repainted rather than tinted, so it cannot be lost against
+        // whatever the wallpaper made the window.
+        val ink = getColor(if (enabled) R.color.accent else R.color.alarm_text)
+        status.setTextColor(ink)
+        statusHint.setTextColor(ink)
+        statusHint.visibility = if (enabled) View.GONE else View.VISIBLE
+        showSince(enabled)
+    }
+
+    /** Since when, when we know — the question the switch itself cannot answer. */
+    private fun showSince(enabled: Boolean) {
+        val last = store.lastAlive()
+        if (enabled || last <= 0L) {
+            statusSince.visibility = View.GONE
+            return
+        }
+        val ago = DateUtils.getRelativeTimeSpanString(
+            last,
+            System.currentTimeMillis(),
+            DateUtils.MINUTE_IN_MILLIS,
+        )
+        statusSince.visibility = View.VISIBLE
+        statusSince.text = getString(R.string.status_off_since, ago)
+        statusSince.setTextColor(getColor(R.color.alarm_text))
     }
 
     private fun sw(id: Int, apply: (Settings, Boolean) -> Settings) =

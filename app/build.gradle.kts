@@ -20,8 +20,8 @@ android {
         applicationId = "dev.amishutkin.slopsick"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.1.7"
+        versionCode = 11
+        versionName = "1.1.9"
     }
 
     signingConfigs {

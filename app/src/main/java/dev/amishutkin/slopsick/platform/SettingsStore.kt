@@ -15,6 +15,9 @@ class SettingsStore(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
+    private val health: SharedPreferences =
+        context.applicationContext.getSharedPreferences(HEALTH, Context.MODE_PRIVATE)
+
     init {
         migrate()
     }
@@ -76,6 +79,24 @@ class SettingsStore(context: Context) {
             .apply()
     }
 
+    /**
+     * Records that the service was running at [now].
+     *
+     * Deliberately not part of [Settings]: it is not a switch, it is not locked, and it is
+     * written from the service rather than the settings screen. The settings screen reads
+     * it to answer the one question an off switch cannot — since when. Android can revoke
+     * accessibility access without telling anybody, so "it stopped working" needs a date
+     * before it can become a cause.
+     *
+     * It lives in its own file because [observe] is what the service listens on to pick up
+     * a changed switch: a heartbeat written into the same file would have the service
+     * rescanning every time it told the truth about being alive.
+     */
+    fun markAlive(now: Long) = health.edit().putLong(LAST_ALIVE, now).apply()
+
+    /** When the service was last running, or 0 if it never has been. */
+    fun lastAlive(): Long = health.getLong(LAST_ALIVE, 0L)
+
     fun observe(onChange: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> onChange() }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -88,6 +109,7 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val NAME = "slopsick.settings"
+        const val HEALTH = "slopsick.health"
 
         /** Bump when a default changes, and add the step to [migrate]. */
         const val SCHEMA_VERSION = 1
@@ -105,5 +127,6 @@ class SettingsStore(context: Context) {
         const val HIDE_EXPLORE = "hide_explore"
         const val HIDE_MODULES = "hide_feed_modules"
         const val REPORT_BUTTONS = "report_buttons"
+        const val LAST_ALIVE = "last_alive"
     }
 }

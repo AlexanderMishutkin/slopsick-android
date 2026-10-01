@@ -65,6 +65,9 @@ class SlopsickAccessibilityService : AccessibilityService() {
 
     private lateinit var overlay: OverlayController
     private lateinit var store: SettingsStore
+
+    /** Last time [markAlive] actually wrote, so events do not each cost a disk write. */
+    private var aliveWrittenAt = 0L
     private lateinit var reporter: BugReporter
 
     @Volatile
@@ -217,9 +220,25 @@ class SlopsickAccessibilityService : AccessibilityService() {
             settings = store.load()
             main.post { scan() }
         }
+        markAlive()
+    }
+
+    /**
+     * Leaves a dated note that the service was running.
+     *
+     * Nothing in the app can put accessibility access back — that needs a system
+     * permission this app will not ask for — so the most it can do is make the gap
+     * measurable afterwards. Throttled, because this runs off every event the feed emits.
+     */
+    private fun markAlive() {
+        val now = System.currentTimeMillis()
+        if (now - aliveWrittenAt in 0 until ALIVE_INTERVAL_MS) return
+        aliveWrittenAt = now
+        store.markAlive(now)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        markAlive()
         val app = TargetApp.of(event?.packageName?.toString())
         if (app == null) {
             clear()
@@ -554,6 +573,10 @@ class SlopsickAccessibilityService : AccessibilityService() {
 
         /** How long to wait before re-reading a window that could not be read. */
         const val RETRY_MS = 200L
+
+        /** How often the heartbeat reaches disk. Minutes of resolution is plenty to
+         *  answer "since when", and the screen that reads it rounds to days anyway. */
+        const val ALIVE_INTERVAL_MS = 15 * 60 * 1000L
 
         /** How often to check we are still in the app we are covering. */
         const val WATCHDOG_MS = 250L
